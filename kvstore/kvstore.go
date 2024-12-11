@@ -3,6 +3,7 @@ package kvstore
 import (
 	"errors"
 	"sync"
+	"fmt"
 )
 
 // KVStore represents the in-memory key-value store.
@@ -48,4 +49,11 @@ func (s *KVStore) Delete(key string) error {
 	}
 	delete(s.data, key)
 	return nil
+}
+
+// PrintData prints the current in-memory data map.
+func (s *KVStore) PrintData() {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	fmt.Println(s.data)
 }

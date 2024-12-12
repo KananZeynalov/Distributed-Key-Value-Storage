@@ -99,10 +99,10 @@ func main() {
 				fmt.Println("Store not found.")
 			}
 		case "enable-snapshot":
-			var interval time.Duration
+			var interval int
 			fmt.Println("Enter the snapshot interval in seconds:")
 			fmt.Scanln(&interval)
-			stores[currentStore].StartPeriodicSnapshots(interval)
+			stores[currentStore].StartPeriodicSnapshots(time.Duration(interval) * time.Second)
 			fmt.Printf("Periodic snapshots enabled for store %s with interval %d seconds.\n", currentStore, interval)
 
 		case "new-kv":

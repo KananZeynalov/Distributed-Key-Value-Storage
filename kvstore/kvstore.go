@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"encoding/json" // for JSON serialization
+	"time"
 )
 
 // KVStore represents the in-memory key-value store.
@@ -82,3 +83,51 @@ func (s *KVStore) SaveToDisk(filename string) error {
 	fmt.Println("Data successfully saved to disk:", filename)
 	return nil
 }
+
+// LoadFromDisk loads data from a file into the in-memory key-value store.
+func (s *KVStore) LoadFromDisk(filename string) error {
+	// Open the snapshot file
+	file, err := os.Open(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("Snapshot file does not exist. Starting with an empty store.")
+			return nil
+		}
+		return fmt.Errorf("failed to open snapshot file: %w", err)
+	}
+	defer file.Close()
+
+	// Deserialize the JSON data into the map
+	var data map[string]string
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&data)
+	if err != nil {
+		return fmt.Errorf("failed to decode JSON data: %w", err)
+	}
+
+	// Update the in-memory store
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.data = data
+
+	fmt.Println("Data successfully loaded from disk:", filename)
+	return nil
+}
+
+// StartPeriodicSnapshots starts a goroutine that saves the data to disk periodically.
+func (s *KVStore) StartPeriodicSnapshots(filename string, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			err := s.SaveToDisk(filename)
+			if err != nil {
+				fmt.Println("Error during periodic snapshot:", err)
+			} else {
+				fmt.Println("Periodic snapshot saved to disk:", filename)
+			}
+		}
+	}()
+}
+

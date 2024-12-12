@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"kv/kvstore" 
+	"time"
 )
 
 func main() {
@@ -52,4 +53,40 @@ func main() {
 	if err != nil {
 		fmt.Println("As expected, key1 does not exist. Error:", err)
 	}
+
+
+	// Load data from disk
+	err = store.LoadFromDisk("snapshot.json")
+	if err != nil {
+		fmt.Println("Error loading data from disk:", err)
+		return
+	}
+
+	// Print the loaded data
+	fmt.Println("\nCurrent in-memory data after loading from disk:")
+	store.PrintData()
+
+	// Remove old memory to try new snapshot technique
+
+	store.Delete("key1")
+	store.Delete("key2") // guys we are deleting key1 and key2 to see newperiodic snapshots
+	store.SaveToDisk("snapshot.json") // TESTING TIME TICKER SO GETTING RID OF OLD MEMORY
+
+	// Simulate some activity
+	store.Set("kenan", "value1")
+	store.Set("bilal", "value2")
+	store.Set("ediz", "value3")
+
+	// Start periodic snapshots every 10 seconds
+	store.StartPeriodicSnapshots("snapshot.json", 10*time.Second)
+
+	fmt.Println("\nCurrent in-memory data after setting keys:")
+	store.PrintData()
+
+	// Wait to observe periodic snapshots
+	fmt.Println("\nWaiting for periodic snapshots to trigger...")
+	time.Sleep(30 * time.Second) // guys keep program open for 30 seconds to see periodic snapshots
+
+	fmt.Println("Exiting program.")
+
 }

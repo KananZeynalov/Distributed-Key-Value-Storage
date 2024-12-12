@@ -4,6 +4,8 @@ import (
 	"errors"
 	"sync"
 	"fmt"
+	"os"
+	"encoding/json" // for JSON serialization
 )
 
 // KVStore represents the in-memory key-value store.
@@ -56,4 +58,27 @@ func (s *KVStore) PrintData() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	fmt.Println(s.data)
+}
+
+// SaveToDisk saves the in-memory data to a file in JSON format.
+func (s *KVStore) SaveToDisk(filename string) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Open or create the file for writing
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create snapshot file: %w", err)
+	}
+	defer file.Close()
+
+	// Serialize the map to JSON
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(s.data)
+	if err != nil {
+		return fmt.Errorf("failed to encode data to JSON: %w", err)
+	}
+
+	fmt.Println("Data successfully saved to disk:", filename)
+	return nil
 }

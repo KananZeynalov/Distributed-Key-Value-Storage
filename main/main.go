@@ -15,6 +15,15 @@ func main() {
 	fmt.Println("Setting key2 to value2...")
 	store.Set("key2", "value2")
 
+	// Save the current data to disk
+	err := store.SaveToDisk("snapshot.json")
+	if err != nil {
+		fmt.Println("Error saving data to disk:", err)
+		return
+	}
+
+	fmt.Println("Snapshot saved successfully.")
+
 	// Get and print values
 	fmt.Println("\nRetrieving key1...")
 	val, err := store.Get("key1")

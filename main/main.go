@@ -2,91 +2,138 @@ package main
 
 import (
 	"fmt"
-	"kv/kvstore" 
+	"kv/kvstore"
+	"os"
+	"strings"
 	"time"
 )
 
 func main() {
-	store := kvstore.NewKVStore()
+	store := kvstore.NewKVStore("default")
+	var command string
 
-	// Set key-value pairs
-	fmt.Println("Setting key1 to value1...")
-	store.Set("key1", "value1")
+	var stores = make(map[string]*kvstore.KVStore)
+	stores["default"] = store
+	currentStore := "default"
 
-	fmt.Println("Setting key2 to value2...")
-	store.Set("key2", "value2")
+	for {
+		fmt.Println("\nEnter a command (set, get, delete, save, load, print, list-kvs, switch-kv, new-kv, enable-snapshot, exit):")
+		fmt.Scanln(&command)
 
-	// Save the current data to disk
-	err := store.SaveToDisk("snapshot.json")
+		switch command {
+		case "list-kvs":
+			fmt.Println("Available stores:")
+			for name := range stores {
+				fmt.Println(name)
+			}
+		case "set":
+			var key, value string
+			fmt.Println("Enter key:")
+			fmt.Scanln(&key)
+			fmt.Println("Enter value:")
+			fmt.Scanln(&value)
+			stores[currentStore].Set(key, value)
+			fmt.Println("Set operation successful.")
+
+		case "get":
+			var key string
+			fmt.Println("Enter key:")
+			fmt.Scanln(&key)
+			val, err := stores[currentStore].Get(key)
+			if err != nil {
+				fmt.Println("Error retrieving key:", err)
+			} else {
+				fmt.Println("Value:", val)
+			}
+
+		case "delete":
+			var key string
+			fmt.Println("Enter key:")
+			fmt.Scanln(&key)
+			err := stores[currentStore].Delete(key)
+			if err != nil {
+				fmt.Println("Error deleting key:", err)
+			} else {
+				fmt.Println("Delete operation successful.")
+			}
+
+		case "save":
+			err := stores[currentStore].SaveToDisk()
+			if err != nil {
+				fmt.Println("Error saving data to disk:", err)
+			} else {
+				fmt.Printf("Snapshot saved successfully as %s.snapshot.json.\n", currentStore)
+			}
+		case "load":
+			fmt.Println("Available snapshots:")
+			// Assuming you have a function to list files in the directory
+			snapshots, err := listSnapshots()
+			if err != nil {
+				fmt.Println("Error listing snapshots:", err)
+				break
+			}
+			for _, snapshot := range snapshots {
+				fmt.Println(snapshot)
+			}
+			var filename string
+			fmt.Println("Enter the filename to load from:")
+			fmt.Scanln(&filename)
+			err = stores[currentStore].LoadFromDisk(filename)
+			if err != nil {
+				fmt.Println("Error loading data from disk:", err)
+			} else {
+				fmt.Println("Data loaded successfully from", filename)
+			}
+
+		case "print":
+			stores[currentStore].PrintData()
+
+		case "switch-kv":
+			var storeName string
+			fmt.Println("Enter the name of the store to switch to:")
+			fmt.Scanln(&storeName)
+			if _, exists := stores[storeName]; exists {
+				currentStore = storeName
+				fmt.Println("Switched to store:", storeName)
+			} else {
+				fmt.Println("Store not found.")
+			}
+		case "enable-snapshot":
+			var interval time.Duration
+			fmt.Println("Enter the snapshot interval in seconds:")
+			fmt.Scanln(&interval)
+			stores[currentStore].StartPeriodicSnapshots(interval)
+			fmt.Printf("Periodic snapshots enabled for store %s with interval %d seconds.\n", currentStore, interval)
+
+		case "new-kv":
+			var storeName string
+			fmt.Println("Enter the name of the new store:")
+			fmt.Scanln(&storeName)
+			stores[storeName] = kvstore.NewKVStore(storeName)
+			currentStore = storeName
+			fmt.Println("New store created and switched to:", storeName)
+
+		case "exit":
+			fmt.Println("Exiting program.")
+			return
+
+		default:
+			fmt.Println("Unknown command. Please try again.")
+		}
+	}
+}
+
+func listSnapshots() ([]string, error) {
+	files, err := os.ReadDir(".")
 	if err != nil {
-		fmt.Println("Error saving data to disk:", err)
-		return
+		return nil, err
 	}
 
-	fmt.Println("Snapshot saved successfully.")
-
-	// Get and print values
-	fmt.Println("\nRetrieving key1...")
-	val, err := store.Get("key1")
-	if err != nil {
-		fmt.Println("Error retrieving key1:", err)
-	} else {
-		fmt.Println("key1:", val)
+	var snapshots []string
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".snapshot.json") {
+			snapshots = append(snapshots, file.Name())
+		}
 	}
-
-	// Print the entire store (debugging purposes)
-	fmt.Println("\nCurrent in-memory data:")
-	store.PrintData() // Use the custom PrintData method for cleaner output
-
-	// Delete a key
-	fmt.Println("\nDeleting key1...")
-	err = store.Delete("key1")
-	if err != nil {
-		fmt.Println("Error deleting key1:", err)
-	} else {
-		fmt.Println("key1 successfully deleted")
-	}
-
-	// Try to get the deleted key
-	fmt.Println("\nAttempting to retrieve deleted key1...")
-	_, err = store.Get("key1")
-	if err != nil {
-		fmt.Println("As expected, key1 does not exist. Error:", err)
-	}
-
-
-	// Load data from disk
-	err = store.LoadFromDisk("snapshot.json")
-	if err != nil {
-		fmt.Println("Error loading data from disk:", err)
-		return
-	}
-
-	// Print the loaded data
-	fmt.Println("\nCurrent in-memory data after loading from disk:")
-	store.PrintData()
-
-	// Remove old memory to try new snapshot technique
-
-	store.Delete("key1")
-	store.Delete("key2") // guys we are deleting key1 and key2 to see newperiodic snapshots
-	store.SaveToDisk("snapshot.json") // TESTING TIME TICKER SO GETTING RID OF OLD MEMORY
-
-	// Simulate some activity
-	store.Set("kenan", "value1")
-	store.Set("bilal", "value2")
-	store.Set("ediz", "value3")
-
-	// Start periodic snapshots every 10 seconds
-	store.StartPeriodicSnapshots("snapshot.json", 10*time.Second)
-
-	fmt.Println("\nCurrent in-memory data after setting keys:")
-	store.PrintData()
-
-	// Wait to observe periodic snapshots
-	fmt.Println("\nWaiting for periodic snapshots to trigger...")
-	time.Sleep(30 * time.Second) // guys keep program open for 30 seconds to see periodic snapshots
-
-	fmt.Println("Exiting program.")
-
+	return snapshots, nil
 }

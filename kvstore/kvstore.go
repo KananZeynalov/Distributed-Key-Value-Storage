@@ -1,11 +1,11 @@
 package kvstore
 
 import (
+	"encoding/json" // for JSON serialization
 	"errors"
-	"sync"
 	"fmt"
 	"os"
-	"encoding/json" // for JSON serialization
+	"sync"
 	"time"
 )
 
@@ -13,12 +13,14 @@ import (
 type KVStore struct {
 	mu   sync.RWMutex
 	data map[string]string
+	name string
 }
 
 // NewKVStore initializes and returns a new KVStore instance.
-func NewKVStore() *KVStore {
+func NewKVStore(name string) *KVStore {
 	return &KVStore{
 		data: make(map[string]string),
+		name: name,
 	}
 }
 
@@ -62,11 +64,12 @@ func (s *KVStore) PrintData() {
 }
 
 // SaveToDisk saves the in-memory data to a file in JSON format.
-func (s *KVStore) SaveToDisk(filename string) error {
+func (s *KVStore) SaveToDisk() error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Open or create the file for writing
+	filename := s.name + ".snapshot.json"
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot file: %w", err)
@@ -115,13 +118,13 @@ func (s *KVStore) LoadFromDisk(filename string) error {
 }
 
 // StartPeriodicSnapshots starts a goroutine that saves the data to disk periodically.
-func (s *KVStore) StartPeriodicSnapshots(filename string, interval time.Duration) {
+func (s *KVStore) StartPeriodicSnapshots(interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-
+		filename := s.name + ".snapshot.json"
 		for range ticker.C {
-			err := s.SaveToDisk(filename)
+			err := s.SaveToDisk()
 			if err != nil {
 				fmt.Println("Error during periodic snapshot:", err)
 			} else {
@@ -130,4 +133,3 @@ func (s *KVStore) StartPeriodicSnapshots(filename string, interval time.Duration
 		}
 	}()
 }
-

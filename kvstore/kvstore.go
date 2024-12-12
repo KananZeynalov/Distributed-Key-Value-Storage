@@ -1,7 +1,7 @@
 package kvstore
 
 import (
-	"encoding/json" // for JSON serialization
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -9,18 +9,25 @@ import (
 	"time"
 )
 
+// Forward declare Broker to avoid circular dependency
+type Broker interface {
+	IncrementLoad(storeName string)
+}
+
 // KVStore represents the in-memory key-value store.
 type KVStore struct {
-	mu   sync.RWMutex
-	data map[string]string
-	name string
+	mu     sync.RWMutex
+	data   map[string]string
+	name   string
+	broker Broker
 }
 
 // NewKVStore initializes and returns a new KVStore instance.
-func NewKVStore(name string) *KVStore {
+func NewKVStore(name string, broker Broker) *KVStore {
 	return &KVStore{
-		data: make(map[string]string),
-		name: name,
+		data:   make(map[string]string),
+		name:   name,
+		broker: broker,
 	}
 }
 
@@ -29,6 +36,9 @@ func (s *KVStore) Set(key, value string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data[key] = value
+	if s.broker != nil {
+		s.broker.IncrementLoad(s.name)
+	}
 }
 
 // Get retrieves the value associated with the given key.
@@ -39,6 +49,9 @@ func (s *KVStore) Get(key string) (string, error) {
 	val, ok := s.data[key]
 	if !ok {
 		return "", errors.New("key not found")
+	}
+	if s.broker != nil {
+		s.broker.IncrementLoad(s.name)
 	}
 	return val, nil
 }
@@ -53,7 +66,15 @@ func (s *KVStore) Delete(key string) error {
 		return errors.New("key not found")
 	}
 	delete(s.data, key)
+	if s.broker != nil {
+		s.broker.IncrementLoad(s.name)
+	}
 	return nil
+}
+
+// Name returns the name of the KVStore.
+func (s *KVStore) Name() string {
+	return s.name
 }
 
 // PrintData prints the current in-memory data map.

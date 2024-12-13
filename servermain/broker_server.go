@@ -20,6 +20,21 @@ func NewBrokerHandler(b *broker.Broker) *BrokerHandler {
 	return &BrokerHandler{broker: b}
 }
 
+// SetupRoutes sets up HTTP routes for the broker.
+func (h *BrokerHandler) SetupRoutes() {
+	http.HandleFunc("/set", h.SetHandler)
+	http.HandleFunc("/get", h.GetHandler)
+	http.HandleFunc("/getall", h.GetAllHandler)
+	http.HandleFunc("/stores/list", h.ListStoresHandler)
+	// http.HandleFunc("/stores/get", h.GetStoreHandler)
+	http.HandleFunc("/delete", h.DeleteHandler)
+	http.HandleFunc("/snapshot/enable", h.EnableSnapshotHandler)
+	http.HandleFunc("/store/new", h.NewKVHandler)
+	http.HandleFunc("/snapshot/manual", h.ManualSnapshotHandler)
+	http.HandleFunc("/snapshot/broker", h.SnapshotBrokerHandler)
+
+}
+
 // Get the value of the given key
 func (h *BrokerHandler) GetHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -118,15 +133,6 @@ func (h *BrokerHandler) ListStoresHandler(w http.ResponseWriter, r *http.Request
 }
 
 
-// SetupRoutes sets up HTTP routes for the broker.
-func (h *BrokerHandler) SetupRoutes() {
-	http.HandleFunc("/set", h.SetHandler)
-	http.HandleFunc("/get", h.GetHandler)
-	http.HandleFunc("/getall", h.GetAllHandler)
-	http.HandleFunc("/stores/list", h.ListStoresHandler)
-	// http.HandleFunc("/stores/get", h.GetStoreHandler)
-	http.HandleFunc("/delete", h.DeleteHandler)
-}
 
 type KVStoreConfig struct {
 	Name      string `json:"name"`
@@ -184,6 +190,97 @@ func (h *BrokerHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
     }
 }
 
+// EnableSnapshotHandler: POST /snapshot/enable { "storename": "...", "interval": <seconds> }
+func (h *BrokerHandler) EnableSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Only POST is allowed", http.StatusMethodNotAllowed)
+        return
+    }
+
+    var req struct {
+        Storename string `json:"storename"`
+        Interval  int    `json:"interval"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Invalid request body", http.StatusBadRequest)
+        return
+    }
+    h.mu.Lock()
+    err := h.broker.EnablePeriodicSnapshots(req.Storename, req.Interval)
+    h.mu.Unlock()
+
+    if err != nil {
+        http.Error(w, "Failed to enable periodic snapshots: "+err.Error(), http.StatusNotFound)
+        return
+    }
+
+    response := map[string]string{
+        "message": fmt.Sprintf("Periodic snapshots enabled for store %s with interval %d seconds.", req.Storename, req.Interval),
+    }
+    jsonResponse(w, response)
+}
+
+
+// NewKVHandler: POST /store/new { "name": "...", "ip_address": "..." }
+func (h *BrokerHandler) NewKVHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Name      string `json:"name"`
+		IPAddress string `json:"ip_address"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	h.mu.Lock()
+	err := h.broker.CreateStore(req.Name, req.IPAddress)
+	h.mu.Unlock()
+
+	if err != nil {
+		http.Error(w, "Failed to create new store: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	response := map[string]string{
+		"message": "New store created: " + req.Name,
+	}
+	jsonResponse(w, response)
+}
+
+// ManualSnapshotHandler: POST /snapshot/manual
+func (h *BrokerHandler) ManualSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	h.mu.Lock()
+	err := h.broker.ManualSnapshotStore()
+	h.mu.Unlock()
+
+	if err != nil {
+		http.Error(w, "Failed to perform manual snapshot: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]string{
+		"message": "Manual snapshot successful",
+	}
+	jsonResponse(w, response)
+}
+
+
+
+
+
+
 
 
 func (h *BrokerHandler) ConfigurePeers() {
@@ -223,6 +320,31 @@ func main() {
 		fmt.Println("Error starting server:", err)
 	}
 }
+
+// SnapshotBrokerHandler: POST /snapshot/broker
+func (h *BrokerHandler) SnapshotBrokerHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	h.mu.Lock()
+	err := h.broker.SaveSnapshot()
+	h.mu.Unlock()
+
+	if err != nil {
+		http.Error(w, "Error saving broker snapshot: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]string{
+		"message": "Broker snapshot saved successfully.",
+	}
+	jsonResponse(w, response)
+}
+
+
+
 
 func jsonResponse(w http.ResponseWriter, data interface{}) {
     w.Header().Set("Content-Type", "application/json")

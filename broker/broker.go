@@ -7,11 +7,38 @@ import (
 	"kv/kvstore"
 	"os"
 	"sync"
+	"time"
+	"log"
 )
 
 // SaveSnapshot saves the current state of the broker to a JSON file.
 func (b *Broker) SaveSnapshot() error {
 	var filePath = "./data/broker/broker_snapshot.json"
+
+	    // Ensure the directory exists
+		dir := "./data/broker"
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			log.Fatalf("Failed to create directory: %v", err)
+		}
+	
+		// Check if the file exists
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			// File does not exist, create it
+			file, err := os.Create(filePath)
+			if err != nil {
+				log.Fatalf("Failed to create file: %v", err)
+			}
+			defer file.Close()
+			log.Printf("File created: %s", filePath)
+		} else {
+			// File exists, open it
+			file, err := os.Open(filePath)
+			if err != nil {
+				log.Fatalf("Failed to open file: %v", err)
+			}
+			defer file.Close()
+			log.Printf("File opened: %s", filePath)
+		}
 
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -289,4 +316,15 @@ func (b *Broker) DisplayPeers() {
 	for name, store := range b.peers {
 		fmt.Println("Snapshot of " + name + " is in " + store.Name())
 	}
+}
+
+// EnablePeriodicSnapshots configures periodic snapshots for a given store.
+func (b *Broker) EnablePeriodicSnapshots(storename string, intervalSeconds int) error {
+	store, err := b.GetStore(storename)
+	if err != nil {
+		return err
+	}
+	interval := time.Duration(intervalSeconds) * time.Second
+	store.StartPeriodicSnapshots(interval)
+	return nil
 }

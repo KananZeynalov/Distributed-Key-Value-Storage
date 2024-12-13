@@ -90,7 +90,7 @@ func (s *KVStore) SaveToDisk() error {
 	defer s.mu.RUnlock()
 
 	// Open or create the file for writing
-	filename := "./data/kvstore/" + s.name + ".snapshot.json"
+	filename := s.name + ".snapshot.json"
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot file: %w", err)

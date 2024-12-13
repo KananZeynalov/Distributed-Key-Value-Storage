@@ -20,6 +20,7 @@ type KVStore struct {
 	data   map[string]string
 	name   string
 	broker Broker
+	ip_address string
 }
 
 // NewKVStore initializes and returns a new KVStore instance.

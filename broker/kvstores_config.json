@@ -1,0 +1,6 @@
+{
+    "kvstores": [
+      { "name": "store1", "ip_address": "localhost:3000" },
+      { "name": "store2", "ip_address": "localhost:3001" }
+    ]
+  }

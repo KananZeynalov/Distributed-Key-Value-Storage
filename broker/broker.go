@@ -57,11 +57,18 @@ func (b *Broker) LoadSnapshot(filePath string) error {
 	return nil
 }
 
+// Pair represents a pair of KVStores
+type Pair struct {
+	Store1 *kvstore.KVStore
+	Store2 *kvstore.KVStore
+}
+
 // Broker manages multiple KVStore instances and handles load balancing.
 type Broker struct {
 	mu     sync.RWMutex
 	stores map[string]*kvstore.KVStore
 	loads  map[string]int // Simple load metric: number of operations handled
+	pairs  []Pair
 }
 
 // NewBroker initializes and returns a new Broker instance.
@@ -160,4 +167,32 @@ func (b *Broker) StoreExists(name string) bool {
 	defer b.mu.RUnlock()
 	_, exists := b.stores[name]
 	return exists
+}
+
+// PairKVStores pairs the existing KVStores and stores them in a slice of pairs
+func (b *Broker) PairKVStores() ([]Pair, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if len(b.stores) < 2 {
+		return nil, errors.New("not enough stores to create pairs")
+	}
+
+	var pairs []Pair
+	storeNames := make([]string, 0, len(b.stores))
+	for name := range b.stores {
+		storeNames = append(storeNames, name)
+	}
+
+	// Pairing logic
+	for i := 0; i < len(storeNames); i++ {
+		for j := i + 1; j < len(storeNames); j++ {
+			pairs = append(pairs, Pair{
+				Store1: storeNames[i],
+				Store2: storeNames[j],
+			})
+		}
+	}
+
+	return pairs, nil
 }

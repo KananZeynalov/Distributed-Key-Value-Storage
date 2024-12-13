@@ -11,16 +11,18 @@ import (
 
 // KVStore represents the in-memory key-value store.
 type KVStore struct {
-	mu   sync.RWMutex
-	data map[string]string
-	name string
+	mu         sync.RWMutex
+	data       map[string]string
+	name       string
+	ip_address string
 }
 
 // NewKVStore initializes and returns a new KVStore instance.
-func NewKVStore(name string) *KVStore {
+func NewKVStore(name string, ip_address string) *KVStore {
 	return &KVStore{
-		data: make(map[string]string),
-		name: name,
+		data:       make(map[string]string),
+		name:       name,
+		ip_address: ip_address,
 	}
 }
 

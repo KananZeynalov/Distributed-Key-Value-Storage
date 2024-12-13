@@ -59,11 +59,18 @@ func (b *Broker) LoadSnapshot() error {
 	return nil
 }
 
+// Pair represents a pair of KVStores
+type Pair struct {
+	Store1 *kvstore.KVStore
+	Store2 *kvstore.KVStore
+}
+
 // Broker manages multiple KVStore instances and handles load balancing.
 type Broker struct {
 	mu     sync.RWMutex
 	stores map[string]*kvstore.KVStore
 	loads  map[string]int // Simple load metric: number of operations handled
+	pairs  []Pair
 }
 
 // NewBroker initializes and returns a new Broker instance.
@@ -75,13 +82,13 @@ func NewBroker() *Broker {
 }
 
 // CreateStore creates a new KVStore with the given name and adds it to the broker.
-func (b *Broker) CreateStore(name string) error {
+func (b *Broker) CreateStore(name string, ip_address string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, exists := b.stores[name]; exists {
 		return errors.New("store with this name already exists")
 	}
-	store := kvstore.NewKVStore(name)
+	store := kvstore.NewKVStore(name, ip_address)
 	b.stores[name] = store
 	b.loads[name] = 0
 	return nil
@@ -179,30 +186,35 @@ func (b *Broker) ManualSnapshotStore() error {
 }
 
 func (b *Broker) GetKey(key string) (string, error) {
+
+func (b *Broker) GetKey(key string) (string, error) {
 	for _, store := range b.stores {
 		val, err := store.Get(key)
 		if err == nil {
 			fmt.Println("Value:", val)
 			return val, nil
+			return val, nil
 		}
 	}
 	fmt.Println("Key not found in any store")
+	return "", errors.New("key not found in any store")
 	return "", errors.New("key not found")
 }
 
-func (b *Broker) SetKey(key string, value string) {
+func (b *Broker) SetKey(key string, value string) error {
 	store, err := b.GetLeastLoadedStore()
 	if err != nil {
 		fmt.Println("Error retrieving store:", err)
-		return
+		return fmt.Errorf("failed to retrieve the least loaded store: %w", err)
 	}
 	store.Set(key, value)
 	if err != nil {
 		fmt.Println("Error setting key:", err)
-		return
+		return fmt.Errorf("failed to retrieve the least loaded store: %w", err)
 	}
 	b.IncrementLoad(store.Name())
 	fmt.Println("Set operation successful.")
+	return nil
 }
 
 func (b *Broker) DeleteKey(key string) {
@@ -239,4 +251,32 @@ func (b *Broker) ListAllData() error {
 		store.PrintData()
 	}
 	return nil
+}
+
+// PairKVStores pairs the existing KVStores and stores them in a slice of pairs
+func (b *Broker) PairKVStores() ([]Pair, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if len(b.stores) < 2 {
+		return nil, errors.New("not enough stores to create pairs")
+	}
+
+	var pairs []Pair
+	storeNames := make([]string, 0, len(b.stores))
+	for name := range b.stores {
+		storeNames = append(storeNames, name)
+	}
+
+	// Pairing logic
+	//for i := 0; i < len(storeNames); i++ {
+	//	for j := i + 1; j < len(storeNames); j++ {
+	//		pairs = append(pairs, Pair{
+	//			Store1: storeNames[i],
+	//			Store2: storeNames[j],
+	//		})
+	//	}
+	//}
+
+	return pairs, nil
 }

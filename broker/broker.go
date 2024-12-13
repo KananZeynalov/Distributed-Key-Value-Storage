@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+func (b *Broker) StartPeering() error {
+	NotifyPeersOfEachOther(b.peerlist)
+	return nil
+}
+
 // SaveSnapshot saves the current state of the broker to a JSON file.
 func (b *Broker) SaveSnapshot() error {
 	var filePath = "./data/broker/broker_snapshot.json"

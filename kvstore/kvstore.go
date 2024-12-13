@@ -15,6 +15,7 @@ type KVStore struct {
 	data       map[string]string
 	name       string
 	ip_address string
+	peer_ip    string
 }
 
 // NewKVStore initializes and returns a new KVStore instance.
@@ -24,6 +25,13 @@ func NewKVStore(name string, ip_address string) *KVStore {
 		name:       name,
 		ip_address: ip_address,
 	}
+}
+
+// SetPeerIP sets the peer IP address for the KVStore.
+func (s *KVStore) SetPeerIP(peer_ip string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.peer_ip = peer_ip
 }
 
 // Set inserts or updates the value for a given key.

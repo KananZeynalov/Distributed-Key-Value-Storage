@@ -273,26 +273,11 @@ func (h *BrokerHandler) ManualSnapshotHandler(w http.ResponseWriter, r *http.Req
 	jsonResponse(w, response)
 }
 
-func (h *BrokerHandler) NotifyPeersOfEachOther() {
-
-	current := h.broker.GetList().Head
-	if h.broker.GetList().Head == nil {
-		fmt.Println("List is empty")
-		return
-	}
-	for {
-		//peer_ip := current.Next.IpAddress
-		// Send http request to the current node, notifying its peer
-		current = current.Next
-		if current == h.broker.GetList().Head {
-			break // Completed a full circle
-		}
-	}
-}
-
 func main() {
 	// Initialize the broker
 	b := broker.NewBroker()
+
+	err := b.StartPeering()
 
 	// Load KVStore configurations from the JSON file
 	configs, err := LoadKVStoresConfig("kvstores_config.json")

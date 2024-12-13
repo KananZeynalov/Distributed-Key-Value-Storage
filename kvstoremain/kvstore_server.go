@@ -149,12 +149,29 @@ func (h *KVStoreHandler) SetupRoutes() {
 	http.HandleFunc("/set", h.SetHandler)
 	http.HandleFunc("/name", h.GetNameHandler)
 	http.HandleFunc("/getall", h.GetAllDataHandler)
+	http.HandleFunc("/notify", h.NotificationHandler)
 }
 
 func (h *KVStoreHandler) GetNameHandler(w http.ResponseWriter, r *http.Request) {
 	response := map[string]string{"name": h.kvstore.Name()}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func (h *KVStoreHandler) NotificationHandler(w http.ResponseWriter, r *http.Request) {
+	var requestData map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	peerIP, peerIPExists := requestData["peer_ip"]
+	if !peerIPExists {
+		http.Error(w, "Missing peer_ip in request body", http.StatusBadRequest)
+		return
+	}
+
+	h.kvstore.SetPeerIP(peerIP)
 }
 
 func (h *KVStoreHandler) StartPeriodicSnapshotsHandler(w http.ResponseWriter, r *http.Request) {

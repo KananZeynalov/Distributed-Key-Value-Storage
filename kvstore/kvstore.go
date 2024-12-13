@@ -34,6 +34,13 @@ func (s *KVStore) SetPeerIP(peer_ip string) {
 	s.peer_ip = peer_ip
 }
 
+// GetPeerIP returns the peer IP address for the KVStore.
+func (s *KVStore) GetPeerIP() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.peer_ip
+}
+
 // Set inserts or updates the value for a given key.
 func (s *KVStore) Set(key, value string) error {
 	s.mu.Lock()

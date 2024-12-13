@@ -3,6 +3,7 @@ package broker
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"kv/kvstore"
 	"os"
 	"sync"
@@ -10,7 +11,7 @@ import (
 
 // SaveSnapshot saves the current state of the broker to a JSON file.
 func (b *Broker) SaveSnapshot() error {
-	var filePath = "broker_snapshot.json"
+	var filePath = "./data/broker/broker_snapshot.json"
 
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -30,9 +31,10 @@ func (b *Broker) SaveSnapshot() error {
 }
 
 // LoadSnapshot loads the broker state from a JSON file.
-func (b *Broker) LoadSnapshot(filePath string) error {
+func (b *Broker) LoadSnapshot() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	var filePath = "./data/broker/broker_snapshot.json"
 
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -72,15 +74,16 @@ func NewBroker() *Broker {
 	}
 }
 
-// AddStore adds a new KVStore to the broker.
-func (b *Broker) AddStore(store *kvstore.KVStore) error {
+// CreateStore creates a new KVStore with the given name and adds it to the broker.
+func (b *Broker) CreateStore(name string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, exists := b.stores[store.Name()]; exists {
+	if _, exists := b.stores[name]; exists {
 		return errors.New("store with this name already exists")
 	}
-	b.stores[store.Name()] = store
-	b.loads[store.Name()] = 0
+	store := kvstore.NewKVStore(name, b)
+	b.stores[name] = store
+	b.loads[name] = 0
 	return nil
 }
 
@@ -160,4 +163,80 @@ func (b *Broker) StoreExists(name string) bool {
 	defer b.mu.RUnlock()
 	_, exists := b.stores[name]
 	return exists
+}
+
+// StoreExists checks if a store with the given name exists.
+func (b *Broker) ManualSnapshotStore() error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	for name, store := range b.stores {
+		err := store.SaveToDisk()
+		if err != nil {
+			return fmt.Errorf("failed to save snapshot for store %s: %v", name, err)
+		}
+	}
+	return nil
+}
+
+func (b *Broker) GetKey(key string) {
+
+	for _, store := range b.stores {
+		val, err := store.Get(key)
+		if err == nil {
+			fmt.Println("Value:", val)
+			return
+		}
+	}
+	fmt.Println("Key not found in any store")
+}
+
+func (b *Broker) SetKey(key string, value string) {
+	store, err := b.GetLeastLoadedStore()
+	if err != nil {
+		fmt.Println("Error retrieving store:", err)
+		return
+	}
+	store.Set(key, value)
+	if err != nil {
+		fmt.Println("Error setting key:", err)
+		return
+	}
+	b.IncrementLoad(store.Name())
+	fmt.Println("Set operation successful.")
+}
+
+func (b *Broker) DeleteKey(key string) {
+	for _, store := range b.stores {
+		err := store.Delete(key)
+		if err == nil {
+			b.ResetLoad(store.Name())
+			fmt.Println("Delete operation successful.")
+			return
+		}
+	}
+	fmt.Println("Key not found in any store")
+}
+
+func (b *Broker) LoadStoreFromSnapshot(storename string, filename string) {
+	store, err := b.GetStore(storename)
+	if err != nil {
+		fmt.Println("Error retrieving store:", err)
+		return
+	}
+	err = store.LoadFromDisk(filename)
+	if err != nil {
+		fmt.Println("Error loading data from disk:", err)
+	} else {
+		fmt.Println("Data loaded successfully from", filename)
+	}
+}
+
+func (b *Broker) ListAllData() error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	for name, store := range b.stores {
+		fmt.Printf("Store: %s\n", name)
+		store.PrintData()
+	}
+	return nil
 }

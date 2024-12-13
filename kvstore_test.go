@@ -1,6 +1,7 @@
 package kvstore
 
 import (
+	"kv/broker"
 	"kv/kvstore"
 	"os"
 	"testing"
@@ -8,7 +9,8 @@ import (
 )
 
 func TestKVStore_SetAndGet(t *testing.T) {
-	store := kvstore.NewKVStore("teststore")
+	broker := broker.NewBroker()
+	store := kvstore.NewKVStore("teststore", broker)
 	store.Set("foo", "bar")
 
 	val, err := store.Get("foo")
@@ -21,7 +23,8 @@ func TestKVStore_SetAndGet(t *testing.T) {
 }
 
 func TestKVStore_GetNonExistentKey(t *testing.T) {
-	store := kvstore.NewKVStore("teststore")
+	broker := broker.NewBroker()
+	store := kvstore.NewKVStore("teststore", broker)
 
 	_, err := store.Get("nonexistent")
 	if err == nil {
@@ -30,7 +33,8 @@ func TestKVStore_GetNonExistentKey(t *testing.T) {
 }
 
 func TestKVStore_Delete(t *testing.T) {
-	store := kvstore.NewKVStore("teststore")
+	broker := broker.NewBroker()
+	store := kvstore.NewKVStore("teststore", broker)
 	store.Set("foo", "bar")
 
 	err := store.Delete("foo")
@@ -45,7 +49,8 @@ func TestKVStore_Delete(t *testing.T) {
 }
 
 func TestKVStore_DeleteNonExistentKey(t *testing.T) {
-	store := kvstore.NewKVStore("teststore")
+	broker := broker.NewBroker()
+	store := kvstore.NewKVStore("teststore", broker)
 
 	err := store.Delete("nonexistent")
 	if err == nil {
@@ -53,7 +58,8 @@ func TestKVStore_DeleteNonExistentKey(t *testing.T) {
 	}
 }
 func TestKVStore_SaveAndLoad(t *testing.T) {
-	store := kvstore.NewKVStore("teststore")
+	broker := broker.NewBroker()
+	store := kvstore.NewKVStore("teststore", broker)
 	store.Set("foo", "bar")
 	store.Set("baz", "qux")
 
@@ -62,7 +68,7 @@ func TestKVStore_SaveAndLoad(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	newStore := kvstore.NewKVStore("teststore")
+	newStore := kvstore.NewKVStore("teststore", broker)
 	err = newStore.LoadFromDisk("teststore.snapshot.json")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -88,7 +94,8 @@ func TestKVStore_SaveAndLoad(t *testing.T) {
 	defer os.Remove("teststore.snapshot.json")
 }
 func TestKVStore_SaveToDisk(t *testing.T) {
-	store := kvstore.NewKVStore("teststore")
+	broker := broker.NewBroker()
+	store := kvstore.NewKVStore("teststore", broker)
 	store.Set("foo", "bar")
 
 	err := store.SaveToDisk()
@@ -101,11 +108,12 @@ func TestKVStore_SaveToDisk(t *testing.T) {
 }
 
 func TestKVStore_LoadFromDisk(t *testing.T) {
-	store := kvstore.NewKVStore("teststore")
+	broker := broker.NewBroker()
+	store := kvstore.NewKVStore("teststore", broker)
 	store.Set("foo", "bar")
 	store.SaveToDisk()
 
-	newStore := kvstore.NewKVStore("teststore")
+	newStore := kvstore.NewKVStore("teststore", broker)
 	err := newStore.LoadFromDisk("teststore.snapshot.json")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -124,7 +132,8 @@ func TestKVStore_LoadFromDisk(t *testing.T) {
 }
 
 func TestKVStore_StartPeriodicSnapshots(t *testing.T) {
-	store := kvstore.NewKVStore("teststore")
+	broker := broker.NewBroker()
+	store := kvstore.NewKVStore("teststore", broker)
 	store.Set("foo", "bar")
 
 	store.StartPeriodicSnapshots(1 * time.Second)

@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"kv/broker"
 	"kv/kvstore"
 	"os"
 	"strings"
 	"time"
+	"kv/broker"
 )
 
 func main() {
@@ -40,7 +40,7 @@ func main() {
 			fmt.Scanln(&key)
 			fmt.Println("Enter value:")
 			fmt.Scanln(&value)
-			store, err := broker.GetStore(currentStoreName)
+			store, err := broker.GetLeastLoadedStore()
 			if err != nil {
 				fmt.Println("Error retrieving store:", err)
 				continue

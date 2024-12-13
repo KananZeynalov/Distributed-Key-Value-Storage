@@ -1,28 +1,28 @@
-package main
+package broker
 
 import (
 	"errors"
-	"sync"
 	"kv/kvstore"
+	"sync"
 )
 
 // Broker manages multiple KVStore instances and handles load balancing.
 type Broker struct {
-	mu        sync.RWMutex
-	stores    map[string]*KVStore
-	loads     map[string]int // Simple load metric: number of operations handled
+	mu     sync.RWMutex
+	stores map[string]*kvstore.KVStore
+	loads  map[string]int // Simple load metric: number of operations handled
 }
 
 // NewBroker initializes and returns a new Broker instance.
 func NewBroker() *Broker {
 	return &Broker{
-		stores: make(map[string]*KVStore),
+		stores: make(map[string]*kvstore.KVStore),
 		loads:  make(map[string]int),
 	}
 }
 
 // AddStore adds a new KVStore to the broker.
-func (b *Broker) AddStore(store *KVStore) error {
+func (b *Broker) AddStore(store *kvstore.KVStore) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, exists := b.stores[store.Name()]; exists {
@@ -46,13 +46,13 @@ func (b *Broker) RemoveStore(name string) error {
 }
 
 // GetLeastLoadedStore returns the name of the store with the least load.
-func (b *Broker) GetLeastLoadedStore() (*KVStore, error) {
+func (b *Broker) GetLeastLoadedStore() (*kvstore.KVStore, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if len(b.stores) == 0 {
 		return nil, errors.New("no stores available")
 	}
-	var leastLoadedStore *KVStore
+	var leastLoadedStore *kvstore.KVStore
 	minLoad := int(^uint(0) >> 1) // Initialize with maximum int
 	for name, store := range b.stores {
 		if b.loads[name] < minLoad {
@@ -93,7 +93,7 @@ func (b *Broker) ListStores() []string {
 }
 
 // GetStore retrieves a store by name.
-func (b *Broker) GetStore(name string) (*KVStore, error) {
+func (b *Broker) GetStore(name string) (*kvstore.KVStore, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	store, exists := b.stores[name]
@@ -110,4 +110,3 @@ func (b *Broker) StoreExists(name string) bool {
 	_, exists := b.stores[name]
 	return exists
 }
-

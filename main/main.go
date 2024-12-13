@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"kv/broker"
 	"kv/kvstore"
 	"os"
 	"strings"
@@ -9,7 +10,7 @@ import (
 )
 
 func main() {
-	broker := NewBroker()
+	broker := broker.NewBroker()
 
 	// Initialize default KVStore and add to broker
 	defaultStore := kvstore.NewKVStore("default", broker)

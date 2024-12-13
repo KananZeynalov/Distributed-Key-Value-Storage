@@ -102,6 +102,7 @@ func (h *BrokerHandler) SetHandler(w http.ResponseWriter, r *http.Request) {
 		"message": "Set operation successful",
 	}
 	json.NewEncoder(w).Encode(response)
+
 }
 
 // ListStoresHandler lists all the stores in the broker.
@@ -119,31 +120,6 @@ func (h *BrokerHandler) ListStoresHandler(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(stores)
 }
 
-// GetStoreHandler retrieves a specific store's load.
-// func (h *BrokerHandler) GetStoreHandler(w http.ResponseWriter, r *http.Request) {
-// 	if r.Method != http.MethodGet {
-// 		http.Error(w, "Only GET is allowed", http.StatusMethodNotAllowed)
-// 		return
-// 	}
-
-// 	storeName := r.URL.Query().Get("name")
-// 	if storeName == "" {
-// 		http.Error(w, "Missing 'name' query parameter", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	h.mu.RLock()
-// 	defer h.mu.RUnlock()
-
-// 	store, err := h.broker.GetStore(storeName)
-// 	if err != nil {
-// 		http.Error(w, fmt.Sprintf("Store not found: %v", err), http.StatusNotFound)
-// 		return
-// 	}
-
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(map[string]int{"load": h.broker.loads[store.Name()]})
-// }
 
 // SetupRoutes sets up HTTP routes for the broker.
 func (h *BrokerHandler) SetupRoutes() {
@@ -152,6 +128,7 @@ func (h *BrokerHandler) SetupRoutes() {
 	http.HandleFunc("/getall", h.GetAllHandler)
 	http.HandleFunc("/stores/list", h.ListStoresHandler)
 	// http.HandleFunc("/stores/get", h.GetStoreHandler)
+	http.HandleFunc("/delete", h.DeleteHandler)
 }
 
 type KVStoreConfig struct {
@@ -176,6 +153,41 @@ func LoadKVStoresConfig(filePath string) ([]KVStoreConfig, error) {
 
 	return config.KVStores, nil
 }
+
+
+// DeleteHandler: POST /delete { "key": "..." }
+func (h *BrokerHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Only POST is allowed", http.StatusMethodNotAllowed)
+        return
+    }
+
+    var req struct {
+        Key string `json:"key"`
+    }
+
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Invalid request body", http.StatusBadRequest)
+        return
+    }
+
+    h.mu.Lock()
+    deleted := h.broker.DeleteKey(req.Key)
+    h.mu.Unlock()
+
+    if deleted {
+        // Key was successfully deleted
+        response := map[string]string{
+            "message": "Delete operation successful",
+        }
+        jsonResponse(w, response)
+    } else {
+        // Key was not found in any store
+        http.Error(w, "Key not found in any store", http.StatusNotFound)
+    }
+}
+
+
 
 func (h *BrokerHandler) ConfigurePeers() {
 
@@ -210,3 +222,9 @@ func main() {
 		fmt.Println("Error starting server:", err)
 	}
 }
+
+func jsonResponse(w http.ResponseWriter, data interface{}) {
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(data)
+}
+

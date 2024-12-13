@@ -214,17 +214,21 @@ func (b *Broker) SetKey(key string, value string) error {
 	return nil
 }
 
-func (b *Broker) DeleteKey(key string) {
-	for _, store := range b.stores {
-		err := store.Delete(key)
-		if err == nil {
-			b.ResetLoad(store.Name())
-			fmt.Println("Delete operation successful.")
-			return
-		}
-	}
-	fmt.Println("Key not found in any store")
+func (b *Broker) DeleteKey(key string) bool {
+    for _, store := range b.stores {
+        err := store.Delete(key)
+        if err == nil {
+            b.ResetLoad(store.Name())
+            fmt.Println("Delete operation successful.")
+            return true
+        }
+    }
+    fmt.Println("Key not found in any store")
+    return false
 }
+
+
+
 
 func (b *Broker) LoadStoreFromSnapshot(storename string, filename string) {
 	store, err := b.GetStore(storename)

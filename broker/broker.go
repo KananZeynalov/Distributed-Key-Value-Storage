@@ -82,13 +82,13 @@ func NewBroker() *Broker {
 }
 
 // CreateStore creates a new KVStore with the given name and adds it to the broker.
-func (b *Broker) CreateStore(name string) error {
+func (b *Broker) CreateStore(name string, ip_address string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, exists := b.stores[name]; exists {
 		return errors.New("store with this name already exists")
 	}
-	store := kvstore.NewKVStore(name)
+	store := kvstore.NewKVStore(name, ip_address)
 	b.stores[name] = store
 	b.loads[name] = 0
 	return nil
@@ -266,14 +266,14 @@ func (b *Broker) PairKVStores() ([]Pair, error) {
 	}
 
 	// Pairing logic
-	for i := 0; i < len(storeNames); i++ {
-		for j := i + 1; j < len(storeNames); j++ {
-			pairs = append(pairs, Pair{
-				Store1: storeNames[i],
-				Store2: storeNames[j],
-			})
-		}
-	}
+	//for i := 0; i < len(storeNames); i++ {
+	//	for j := i + 1; j < len(storeNames); j++ {
+	//		pairs = append(pairs, Pair{
+	//			Store1: storeNames[i],
+	//			Store2: storeNames[j],
+	//		})
+	//	}
+	//}
 
 	return pairs, nil
 }

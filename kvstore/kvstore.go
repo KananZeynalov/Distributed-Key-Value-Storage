@@ -27,10 +27,14 @@ func NewKVStore(name string, ip_address string) *KVStore {
 }
 
 // Set inserts or updates the value for a given key.
-func (s *KVStore) Set(key, value string) {
+func (s *KVStore) Set(key, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if key == "" {
+		return errors.New("key cannot be empty")
+	}
 	s.data[key] = value
+	return nil
 }
 
 // Get retrieves the value associated with the given key.
@@ -71,13 +75,26 @@ func (s *KVStore) PrintData() {
 	fmt.Println(s.data)
 }
 
+// GetAllData returns a copy of the entire data map.
+func (s *KVStore) GetAllData() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Create a copy of the data map to avoid race conditions
+	dataCopy := make(map[string]string)
+	for key, value := range s.data {
+		dataCopy[key] = value
+	}
+	return dataCopy
+}
+
 // SaveToDisk saves the in-memory data to a file in JSON format.
 func (s *KVStore) SaveToDisk() error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	// Open or create the file for writing
-	filename := "./data/kvstore/" + s.name + ".snapshot.json"
+	filename := s.name + ".snapshot.json"
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot file: %w", err)

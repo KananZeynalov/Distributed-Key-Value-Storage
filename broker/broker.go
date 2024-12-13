@@ -5,13 +5,40 @@ import (
 	"errors"
 	"fmt"
 	"kv/kvstore"
+	"log"
 	"os"
 	"sync"
+	"time"
 )
 
 // SaveSnapshot saves the current state of the broker to a JSON file.
 func (b *Broker) SaveSnapshot() error {
 	var filePath = "./data/broker/broker_snapshot.json"
+
+	// Ensure the directory exists
+	dir := "./data/broker"
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		log.Fatalf("Failed to create directory: %v", err)
+	}
+
+	// Check if the file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// File does not exist, create it
+		file, err := os.Create(filePath)
+		if err != nil {
+			log.Fatalf("Failed to create file: %v", err)
+		}
+		defer file.Close()
+		log.Printf("File created: %s", filePath)
+	} else {
+		// File exists, open it
+		file, err := os.Open(filePath)
+		if err != nil {
+			log.Fatalf("Failed to open file: %v", err)
+		}
+		defer file.Close()
+		log.Printf("File opened: %s", filePath)
+	}
 
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -312,6 +339,20 @@ func (b *Broker) LoadStoreFromSnapshot(storename string, filename string) {
 	}
 }
 
+func (b *Broker) GetAllData() []string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	var allData []string
+	for name, store := range b.stores {
+		data := store.GetAllData()
+		for k, v := range data {
+			allData = append(allData, fmt.Sprintf("Store: %s, Key: %s, Value: %s", name, k, v))
+		}
+	}
+	return allData
+}
+
 func (b *Broker) ListAllData() error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -341,4 +382,15 @@ func (ll *LinkedList) DisplayForward() {
 
 func (b *Broker) GetList() *LinkedList {
 	return b.peerlist
+}
+
+// EnablePeriodicSnapshots configures periodic snapshots for a given store.
+func (b *Broker) EnablePeriodicSnapshots(storename string, intervalSeconds int) error {
+	store, err := b.GetStore(storename)
+	if err != nil {
+		return err
+	}
+	interval := time.Duration(intervalSeconds) * time.Second
+	store.StartPeriodicSnapshots(interval)
+	return nil
 }

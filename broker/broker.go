@@ -1,10 +1,61 @@
 package broker
 
 import (
+	"encoding/json"
 	"errors"
 	"kv/kvstore"
+	"os"
 	"sync"
 )
+
+// SaveSnapshot saves the current state of the broker to a JSON file.
+func (b *Broker) SaveSnapshot() error {
+	var filePath = "broker_snapshot.json"
+
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	data := struct {
+		Stores map[string]int `json:"stores"`
+	}{
+		Stores: b.loads,
+	}
+
+	file, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filePath, file, 0644)
+}
+
+// LoadSnapshot loads the broker state from a JSON file.
+func (b *Broker) LoadSnapshot(filePath string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	data := struct {
+		Stores map[string]int `json:"stores"`
+	}{}
+
+	if err := json.NewDecoder(file).Decode(&data); err != nil {
+		return err
+	}
+
+	for name, load := range data.Stores {
+		if store, exists := b.stores[name]; exists {
+			b.loads[store.Name()] = load
+		}
+	}
+
+	return nil
+}
 
 // Broker manages multiple KVStore instances and handles load balancing.
 type Broker struct {

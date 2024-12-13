@@ -24,9 +24,17 @@ func main() {
 	var command string
 
 	for {
-		fmt.Printf("\n[%s] Enter a command (set, get, delete, save, load, print, list-kvs, switch-kv, new-kv, enable-snapshot, exit):\n", currentStoreName)
+		fmt.Printf("\n[%s] Enter a command (set, get, delete, save, load, print, list-kvs, switch-kv, new-kv, enable-snapshot, snapshot-broker exit):\n", currentStoreName)
 		fmt.Scanln(&command)
-
+		if command == "snapshot-broker" {
+			err := broker.SaveSnapshot()
+			if err != nil {
+				fmt.Println("Error saving broker snapshot:", err)
+			} else {
+				fmt.Println("Broker snapshot saved successfully.")
+			}
+			continue
+		}
 		switch command {
 		case "list-kvs":
 			fmt.Println("Available stores:")

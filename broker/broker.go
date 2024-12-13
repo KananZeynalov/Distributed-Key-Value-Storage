@@ -61,19 +61,79 @@ func (b *Broker) LoadSnapshot() error {
 
 // Broker manages multiple KVStore instances and handles load balancing.
 type Broker struct {
-	mu     sync.RWMutex
-	stores map[string]*kvstore.KVStore
-	loads  map[string]int // Simple load metric: number of operations handled
-	peers  map[string]*kvstore.KVStore
+	mu       sync.RWMutex
+	stores   map[string]*kvstore.KVStore
+	loads    map[string]int // Simple load metric: number of operations handled
+	peerlist *LinkedList
 }
 
 // NewBroker initializes and returns a new Broker instance.
 func NewBroker() *Broker {
 	return &Broker{
-		stores: make(map[string]*kvstore.KVStore),
-		loads:  make(map[string]int),
-		peers:  make(map[string]*kvstore.KVStore),
+		stores:   make(map[string]*kvstore.KVStore),
+		loads:    make(map[string]int),
+		peerlist: &LinkedList{},
 	}
+}
+
+// Node represents a kvstore, this kvstore has the Next's replication
+type StoreNode struct {
+	Name      string
+	IpAddress string
+	Next      *StoreNode
+	Prev      *StoreNode
+}
+
+// LinkedList represents the peer architecture
+type LinkedList struct {
+	Head *StoreNode
+}
+
+// AddNode appends a new node to the circular list
+func (ll *LinkedList) AddNode(name, ipAddress string) {
+	newNode := &StoreNode{Name: name, IpAddress: ipAddress}
+
+	if ll.Head == nil { // If the list is empty
+		ll.Head = newNode
+		newNode.Next = newNode // Points to itself
+		newNode.Prev = newNode
+	} else { // Append to the end
+		tail := ll.Head.Prev // Get the tail node
+		tail.Next = newNode
+		newNode.Prev = tail
+		newNode.Next = ll.Head
+		ll.Head.Prev = newNode
+	}
+}
+
+// RemoveNode removes a node by name
+func (ll *LinkedList) RemoveNode(name string) error {
+	if ll.Head == nil {
+		return fmt.Errorf("list is empty")
+	}
+
+	current := ll.Head
+	for {
+		if current.Name == name {
+			// Update pointers
+			if current.Next == current { // Only one node in the list
+				ll.Head = nil
+			} else {
+				current.Prev.Next = current.Next
+				current.Next.Prev = current.Prev
+				if current == ll.Head { // Removing the head
+					ll.Head = current.Next
+				}
+			}
+			return nil // Node removed
+		}
+
+		current = current.Next
+		if current == ll.Head {
+			break // Completed a full circle
+		}
+	}
+	return fmt.Errorf("node with name %s not found", name)
 }
 
 // CreateStore creates a new KVStore with the given name and adds it to the broker.
@@ -86,6 +146,8 @@ func (b *Broker) CreateStore(name string, ip_address string) error {
 	store := kvstore.NewKVStore(name, ip_address)
 	b.stores[name] = store
 	b.loads[name] = 0
+
+	b.peerlist.AddNode(name, ip_address)
 	return nil
 }
 
@@ -98,6 +160,7 @@ func (b *Broker) RemoveStore(name string) error {
 	}
 	delete(b.stores, name)
 	delete(b.loads, name)
+	b.peerlist.RemoveNode(name)
 	return nil
 }
 
@@ -181,13 +244,26 @@ func (b *Broker) ManualSnapshotStore() error {
 }
 
 func (b *Broker) GetKey(key string) (string, error) {
-	for _, store := range b.stores {
-		val, err := store.Get(key)
+
+	if b.peerlist.Head == nil {
+		fmt.Println("List is empty")
+		return "", errors.New("List is empty")
+	}
+
+	current := b.peerlist.Head
+	for {
+		//TODO
+		val, err := b.stores[current.Name].Get(key)
 		if err == nil {
 			fmt.Println("Value:", val)
 			return val, nil
 		}
+		current = current.Next
+		if current == b.peerlist.Head {
+			break // Completed a full circle
+		}
 	}
+
 	fmt.Println("Key not found in any store")
 	return "", errors.New("key not found in any store")
 }
@@ -210,20 +286,17 @@ func (b *Broker) SetKey(key string, value string) error {
 }
 
 func (b *Broker) DeleteKey(key string) bool {
-    for _, store := range b.stores {
-        err := store.Delete(key)
-        if err == nil {
-            b.ResetLoad(store.Name())
-            fmt.Println("Delete operation successful.")
-            return true
-        }
-    }
-    fmt.Println("Key not found in any store")
-    return false
+	for _, store := range b.stores {
+		err := store.Delete(key)
+		if err == nil {
+			b.ResetLoad(store.Name())
+			fmt.Println("Delete operation successful.")
+			return true
+		}
+	}
+	fmt.Println("Key not found in any store")
+	return false
 }
-
-
-
 
 func (b *Broker) LoadStoreFromSnapshot(storename string, filename string) {
 	store, err := b.GetStore(storename)
@@ -249,30 +322,23 @@ func (b *Broker) ListAllData() error {
 	return nil
 }
 
-// PairKVStores pairs the existing KVStores and stores them in a slice of pairs
-func (b *Broker) PairKVStores() error {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	if len(b.stores) < 2 {
-		return errors.New("not enough stores to create pairs")
+// DisplayForward displays the list from head to tail (circularly)
+func (ll *LinkedList) DisplayForward() {
+	if ll.Head == nil {
+		fmt.Println("List is empty")
+		return
 	}
 
-	stores := make([]*kvstore.KVStore, 0, len(b.stores))
-	for _, store := range b.stores {
-		stores = append(stores, store)
+	current := ll.Head
+	for {
+		fmt.Printf("Name: %s, IP: %s\n", current.Name, current.IpAddress)
+		current = current.Next
+		if current == ll.Head {
+			break // Completed a full circle
+		}
 	}
-
-	// Pairing logic
-	for i := 0; i < len(stores); i++ {
-		b.peers[stores[i].Name()] = stores[(i+1)%len(stores)]
-	}
-
-	return nil
 }
 
-func (b *Broker) DisplayPeers() {
-	for name, store := range b.peers {
-		fmt.Println("Snapshot of " + name + " is in " + store.Name())
-	}
+func (b *Broker) GetList() *LinkedList {
+	return b.peerlist
 }

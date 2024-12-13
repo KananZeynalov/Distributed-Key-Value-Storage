@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"sync"
+	"kv/kvstore"
 )
 
 // Broker manages multiple KVStore instances and handles load balancing.
@@ -90,3 +91,23 @@ func (b *Broker) ListStores() []string {
 	}
 	return names
 }
+
+// GetStore retrieves a store by name.
+func (b *Broker) GetStore(name string) (*KVStore, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	store, exists := b.stores[name]
+	if !exists {
+		return nil, errors.New("store not found")
+	}
+	return store, nil
+}
+
+// StoreExists checks if a store with the given name exists.
+func (b *Broker) StoreExists(name string) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	_, exists := b.stores[name]
+	return exists
+}
+

@@ -9,12 +9,18 @@ import (
 )
 
 func main() {
-	store := kvstore.NewKVStore("default")
-	var command string
+	broker := NewBroker()
 
-	var stores = make(map[string]*kvstore.KVStore)
-	stores["default"] = store
-	currentStore := "default"
+	// Initialize default KVStore and add to broker
+	defaultStore := kvstore.NewKVStore("default", broker)
+	err := broker.AddStore(defaultStore)
+	if err != nil {
+		fmt.Println("Error adding default store:", err)
+		return
+	}
+	currentStoreName := "default"
+
+	var command string
 
 	for {
 		fmt.Println("\nEnter a command (set, get, delete, save, load, print, list-kvs, switch-kv, new-kv, enable-snapshot, exit):")
@@ -23,23 +29,34 @@ func main() {
 		switch command {
 		case "list-kvs":
 			fmt.Println("Available stores:")
-			for name := range stores {
+			for _, name := range broker.ListStores() {
 				fmt.Println(name)
 			}
+
 		case "set":
 			var key, value string
 			fmt.Println("Enter key:")
 			fmt.Scanln(&key)
 			fmt.Println("Enter value:")
 			fmt.Scanln(&value)
-			stores[currentStore].Set(key, value)
+			store, err := broker.GetStore(currentStoreName)
+			if err != nil {
+				fmt.Println("Error retrieving store:", err)
+				continue
+			}
+			store.Set(key, value)
 			fmt.Println("Set operation successful.")
 
 		case "get":
 			var key string
 			fmt.Println("Enter key:")
 			fmt.Scanln(&key)
-			val, err := stores[currentStore].Get(key)
+			store, err := broker.GetStore(currentStoreName)
+			if err != nil {
+				fmt.Println("Error retrieving store:", err)
+				continue
+			}
+			val, err := store.Get(key)
 			if err != nil {
 				fmt.Println("Error retrieving key:", err)
 			} else {
@@ -50,7 +67,12 @@ func main() {
 			var key string
 			fmt.Println("Enter key:")
 			fmt.Scanln(&key)
-			err := stores[currentStore].Delete(key)
+			store, err := broker.GetStore(currentStoreName)
+			if err != nil {
+				fmt.Println("Error retrieving store:", err)
+				continue
+			}
+			err = store.Delete(key)
 			if err != nil {
 				fmt.Println("Error deleting key:", err)
 			} else {
@@ -58,15 +80,20 @@ func main() {
 			}
 
 		case "save":
-			err := stores[currentStore].SaveToDisk()
+			store, err := broker.GetStore(currentStoreName)
+			if err != nil {
+				fmt.Println("Error retrieving store:", err)
+				continue
+			}
+			err = store.SaveToDisk()
 			if err != nil {
 				fmt.Println("Error saving data to disk:", err)
 			} else {
-				fmt.Printf("Snapshot saved successfully as %s.snapshot.json.\n", currentStore)
+				fmt.Printf("Snapshot saved successfully as %s.snapshot.json.\n", currentStoreName)
 			}
+
 		case "load":
 			fmt.Println("Available snapshots:")
-			// Assuming you have a function to list files in the directory
 			snapshots, err := listSnapshots()
 			if err != nil {
 				fmt.Println("Error listing snapshots:", err)
@@ -78,7 +105,12 @@ func main() {
 			var filename string
 			fmt.Println("Enter the filename to load from:")
 			fmt.Scanln(&filename)
-			err = stores[currentStore].LoadFromDisk(filename)
+			store, err := broker.GetStore(currentStoreName)
+			if err != nil {
+				fmt.Println("Error retrieving store:", err)
+				continue
+			}
+			err = store.LoadFromDisk(filename)
 			if err != nil {
 				fmt.Println("Error loading data from disk:", err)
 			} else {
@@ -86,32 +118,49 @@ func main() {
 			}
 
 		case "print":
-			stores[currentStore].PrintData()
+			store, err := broker.GetStore(currentStoreName)
+			if err != nil {
+				fmt.Println("Error retrieving store:", err)
+				continue
+			}
+			store.PrintData()
 
 		case "switch-kv":
 			var storeName string
 			fmt.Println("Enter the name of the store to switch to:")
 			fmt.Scanln(&storeName)
-			if _, exists := stores[storeName]; exists {
-				currentStore = storeName
+			if broker.StoreExists(storeName) {
+				currentStoreName = storeName
 				fmt.Println("Switched to store:", storeName)
 			} else {
 				fmt.Println("Store not found.")
 			}
-		case "enable-snapshot":
-			var interval int
-			fmt.Println("Enter the snapshot interval in seconds:")
-			fmt.Scanln(&interval)
-			stores[currentStore].StartPeriodicSnapshots(time.Duration(interval) * time.Second)
-			fmt.Printf("Periodic snapshots enabled for store %s with interval %d seconds.\n", currentStore, interval)
 
 		case "new-kv":
 			var storeName string
 			fmt.Println("Enter the name of the new store:")
 			fmt.Scanln(&storeName)
-			stores[storeName] = kvstore.NewKVStore(storeName)
-			currentStore = storeName
-			fmt.Println("New store created and switched to:", storeName)
+			newStore := kvstore.NewKVStore(storeName, broker)
+			err := broker.AddStore(newStore)
+			if err != nil {
+				fmt.Println("Error creating new store:", err)
+			} else {
+				currentStoreName = storeName
+				fmt.Println("New store created and switched to:", storeName)
+			}
+
+		case "enable-snapshot":
+			var intervalSec int
+			fmt.Println("Enter the snapshot interval in seconds:")
+			fmt.Scanln(&intervalSec)
+			interval := time.Duration(intervalSec) * time.Second
+			store, err := broker.GetStore(currentStoreName)
+			if err != nil {
+				fmt.Println("Error retrieving store:", err)
+				continue
+			}
+			store.StartPeriodicSnapshots(interval)
+			fmt.Printf("Periodic snapshots enabled for store %s with interval %d seconds.\n", currentStoreName, intervalSec)
 
 		case "exit":
 			fmt.Println("Exiting program.")
@@ -123,6 +172,7 @@ func main() {
 	}
 }
 
+// listSnapshots lists all snapshot files in the current directory.
 func listSnapshots() ([]string, error) {
 	files, err := os.ReadDir(".")
 	if err != nil {

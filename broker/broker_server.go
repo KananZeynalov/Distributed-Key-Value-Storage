@@ -2,26 +2,51 @@ package broker
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"kv/kvstore" 
-	"kv/broker"  
 	"net/http"
+	"os"
 	"sync"
 )
 
 // Wraps a broker to expose it via HTTP.
 type BrokerHandler struct {
-	broker *broker.Broker
+	broker *Broker
 	mu     sync.RWMutex
 }
 
 // Creates a new BrokerHandler instance.
-func NewBrokerHandler(b *broker.Broker) *BrokerHandler {
+func NewBrokerHandler(b *Broker) *BrokerHandler {
 	return &BrokerHandler{broker: b}
 }
 
-//TODO: GetHandler 
+// Get the value of the given key
+func (h *BrokerHandler) GetHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only GET is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	key := r.URL.Query().Get("key")
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	// Perform the Get operation
+	val, err := h.broker.GetKey(key)
+	if err != nil {
+		http.Error(w, "Failed to get the value: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Respond with success
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]string{
+		"message": "Get operation successful",
+		"value":   val,
+	}
+	json.NewEncoder(w).Encode(response)
+}
 
 // Assign the given key-value pair to the least loaded store
 func (h *BrokerHandler) SetHandler(w http.ResponseWriter, r *http.Request) {
@@ -31,8 +56,8 @@ func (h *BrokerHandler) SetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		key string json:"key"
-		value string json:"value"
+		key   string
+		value string
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -43,15 +68,8 @@ func (h *BrokerHandler) SetHandler(w http.ResponseWriter, r *http.Request) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	// Get the least loaded store
-	store, err := h.broker.GetLeastLoadedStore()
-	if err != nil {
-		http.Error(w, "No available stores: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	// Perform the Set operation
-	if err := store.Set(req.Key, req.Value); err != nil {
+	if err := h.broker.SetKey(req.key, req.value); err != nil {
 		http.Error(w, "Failed to set key-value pair: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -61,11 +79,9 @@ func (h *BrokerHandler) SetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	response := map[string]string{
 		"message": "Set operation successful",
-		"store":   store.Name(),
 	}
 	json.NewEncoder(w).Encode(response)
 }
-
 
 // ListStoresHandler lists all the stores in the broker.
 func (h *BrokerHandler) ListStoresHandler(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +121,7 @@ func (h *BrokerHandler) GetStoreHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"load": h.broker.Loads[store.Name()]})
+	json.NewEncoder(w).Encode(map[string]int{"load": h.broker.loads[store.Name()]})
 }
 
 // SetupRoutes sets up HTTP routes for the broker.
@@ -138,14 +154,13 @@ func LoadKVStoresConfig(filePath string) ([]KVStoreConfig, error) {
 	return config.KVStores, nil
 }
 
-func (h *BrokerHandler) ConfigurePeers() (){
+func (h *BrokerHandler) ConfigurePeers() {
 
 }
 
-
 func main() {
 	// Initialize the broker
-	b := broker.NewBroker()
+	b := NewBroker()
 
 	// Load KVStore configurations from the JSON file
 	configs, err := LoadKVStoresConfig("kvstores_config.json")
@@ -155,8 +170,7 @@ func main() {
 
 	// Initialize and add stores to the broker
 	for _, config := range configs {
-		store := kvstore.NewKVStore(config.Name, config.IPAddress)
-		if err := b.AddStore(store); err != nil {
+		if err := b.CreateStore(config.Name, config.IPAddress); err != nil {
 			panic("Failed to add store: " + err.Error())
 		}
 	}

@@ -16,19 +16,20 @@ type Broker interface {
 
 // KVStore represents the in-memory key-value store.
 type KVStore struct {
-	mu     sync.RWMutex
-	data   map[string]string
-	name   string
-	broker Broker
+	mu         sync.RWMutex
+	data       map[string]string
+	name       string
+	broker     Broker
 	ip_address string
 }
 
 // NewKVStore initializes and returns a new KVStore instance.
-func NewKVStore(name string, broker Broker) *KVStore {
+func NewKVStore(name string, ip_address string, broker Broker) *KVStore {
 	return &KVStore{
-		data:   make(map[string]string),
-		name:   name,
-		broker: broker,
+		data:       make(map[string]string),
+		name:       name,
+		broker:     broker,
+		ip_address: ip_address,
 	}
 }
 

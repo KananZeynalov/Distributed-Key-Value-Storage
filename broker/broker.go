@@ -185,31 +185,33 @@ func (b *Broker) ManualSnapshotStore() error {
 	return nil
 }
 
-func (b *Broker) GetKey(key string) {
+func (b *Broker) GetKey(key string) (string, error) {
 
 	for _, store := range b.stores {
 		val, err := store.Get(key)
 		if err == nil {
 			fmt.Println("Value:", val)
-			return
+			return val, nil
 		}
 	}
 	fmt.Println("Key not found in any store")
+	return "", errors.New("key not found in any store")
 }
 
-func (b *Broker) SetKey(key string, value string) {
+func (b *Broker) SetKey(key string, value string) error {
 	store, err := b.GetLeastLoadedStore()
 	if err != nil {
 		fmt.Println("Error retrieving store:", err)
-		return
+		return fmt.Errorf("failed to retrieve the least loaded store: %w", err)
 	}
 	store.Set(key, value)
 	if err != nil {
 		fmt.Println("Error setting key:", err)
-		return
+		return fmt.Errorf("failed to retrieve the least loaded store: %w", err)
 	}
 	b.IncrementLoad(store.Name())
 	fmt.Println("Set operation successful.")
+	return nil
 }
 
 func (b *Broker) DeleteKey(key string) {

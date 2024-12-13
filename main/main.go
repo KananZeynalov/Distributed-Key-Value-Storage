@@ -51,7 +51,12 @@ func main() {
 			var key string
 			fmt.Println("Enter key:")
 			fmt.Scanln(&key)
-			broker.GetKey(key)
+			value, err := broker.GetKey(key)
+			if err != nil {
+				fmt.Println("Error getting key:", err)
+			} else {
+				fmt.Printf("Value for key '%s': %s\n", key, value)
+			}
 
 		case "delete":
 			var key string

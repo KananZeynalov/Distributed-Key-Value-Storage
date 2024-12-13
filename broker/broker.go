@@ -178,16 +178,16 @@ func (b *Broker) ManualSnapshotStore() error {
 	return nil
 }
 
-func (b *Broker) GetKey(key string) {
-
+func (b *Broker) GetKey(key string) (string, error) {
 	for _, store := range b.stores {
 		val, err := store.Get(key)
 		if err == nil {
 			fmt.Println("Value:", val)
-			return
+			return val, nil
 		}
 	}
 	fmt.Println("Key not found in any store")
+	return "", errors.New("key not found")
 }
 
 func (b *Broker) SetKey(key string, value string) {

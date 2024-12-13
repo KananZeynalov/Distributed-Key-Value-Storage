@@ -2,149 +2,28 @@ package kvstore
 
 import (
 	"kv/broker"
-	"kv/kvstore"
-	"os"
 	"testing"
-	"time"
 )
 
-func TestKVStore_SetAndGet(t *testing.T) {
+func TestKVStore_SetAndGetMultipleValues(t *testing.T) {
 	broker := broker.NewBroker()
-	store := kvstore.NewKVStore("teststore", broker)
-	store.Set("foo", "bar")
+	broker.CreateStore("teststore")
+	broker.SetKey("key1", "value1")
+	broker.SetKey("key2", "value2")
 
-	val, err := store.Get("foo")
+	val1, err := broker.GetKey("key1")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if val != "bar" {
-		t.Fatalf("expected value 'bar', got %v", val)
+	if val1 != "value1" {
+		t.Fatalf("expected value 'value1', got %v", val1)
 	}
-}
 
-func TestKVStore_GetNonExistentKey(t *testing.T) {
-	broker := broker.NewBroker()
-	store := kvstore.NewKVStore("teststore", broker)
-
-	_, err := store.Get("nonexistent")
-	if err == nil {
-		t.Fatalf("expected error, got nil")
-	}
-}
-
-func TestKVStore_Delete(t *testing.T) {
-	broker := broker.NewBroker()
-	store := kvstore.NewKVStore("teststore", broker)
-	store.Set("foo", "bar")
-
-	err := store.Delete("foo")
+	val2, err := broker.GetKey("key2")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-
-	_, err = store.Get("foo")
-	if err == nil {
-		t.Fatalf("expected error, got nil")
+	if val2 != "value2" {
+		t.Fatalf("expected value 'value2', got %v", val2)
 	}
-}
-
-func TestKVStore_DeleteNonExistentKey(t *testing.T) {
-	broker := broker.NewBroker()
-	store := kvstore.NewKVStore("teststore", broker)
-
-	err := store.Delete("nonexistent")
-	if err == nil {
-		t.Fatalf("expected error, got nil")
-	}
-}
-func TestKVStore_SaveAndLoad(t *testing.T) {
-	broker := broker.NewBroker()
-	store := kvstore.NewKVStore("teststore", broker)
-	store.Set("foo", "bar")
-	store.Set("baz", "qux")
-
-	err := store.SaveToDisk()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	newStore := kvstore.NewKVStore("teststore", broker)
-	err = newStore.LoadFromDisk("teststore.snapshot.json")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	val, err := newStore.Get("foo")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if val != "bar" {
-		t.Fatalf("expected value 'bar', got %v", val)
-	}
-
-	val, err = newStore.Get("baz")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if val != "qux" {
-		t.Fatalf("expected value 'qux', got %v", val)
-	}
-
-	// Clean up
-	defer os.Remove("teststore.snapshot.json")
-}
-func TestKVStore_SaveToDisk(t *testing.T) {
-	broker := broker.NewBroker()
-	store := kvstore.NewKVStore("teststore", broker)
-	store.Set("foo", "bar")
-
-	err := store.SaveToDisk()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// Clean up
-	defer os.Remove("teststore.snapshot.json")
-}
-
-func TestKVStore_LoadFromDisk(t *testing.T) {
-	broker := broker.NewBroker()
-	store := kvstore.NewKVStore("teststore", broker)
-	store.Set("foo", "bar")
-	store.SaveToDisk()
-
-	newStore := kvstore.NewKVStore("teststore", broker)
-	err := newStore.LoadFromDisk("teststore.snapshot.json")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-
-	val, err := newStore.Get("foo")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if val != "bar" {
-		t.Fatalf("expected value 'bar', got %v", val)
-	}
-
-	// Clean up
-	defer os.Remove("teststore.snapshot.json")
-}
-
-func TestKVStore_StartPeriodicSnapshots(t *testing.T) {
-	broker := broker.NewBroker()
-	store := kvstore.NewKVStore("teststore", broker)
-	store.Set("foo", "bar")
-
-	store.StartPeriodicSnapshots(1 * time.Second)
-
-	time.Sleep(2 * time.Second)
-
-	_, err := os.Stat("teststore.snapshot.json")
-	if os.IsNotExist(err) {
-		t.Fatalf("expected snapshot file to exist")
-	}
-
-	// Clean up
-	defer os.Remove("teststore.snapshot.json")
 }

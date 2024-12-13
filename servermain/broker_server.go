@@ -1,8 +1,9 @@
-package broker
+package main
 
 import (
 	"encoding/json"
 	"fmt"
+	"kv/broker"
 	"net/http"
 	"os"
 	"sync"
@@ -10,18 +11,18 @@ import (
 
 // Wraps a broker to expose it via HTTP.
 type BrokerHandler struct {
-	broker *Broker
+	broker *broker.Broker
 	mu     sync.RWMutex
 }
 
 // Creates a new BrokerHandler instance.
-func NewBrokerHandler(b *Broker) *BrokerHandler {
+func NewBrokerHandler(b *broker.Broker) *BrokerHandler {
 	return &BrokerHandler{broker: b}
 }
 
 // Get the value of the given key
 func (h *BrokerHandler) GetHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodGet {
 		http.Error(w, "Only GET is allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -30,11 +31,10 @@ func (h *BrokerHandler) GetHandler(w http.ResponseWriter, r *http.Request) {
 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-
 	// Perform the Get operation
 	val, err := h.broker.GetKey(key)
 	if err != nil {
-		http.Error(w, "Failed to get the value: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to get the value: "+key+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -48,6 +48,26 @@ func (h *BrokerHandler) GetHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func (h *BrokerHandler) GetAllHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Only GET is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	// Perform the Get operation
+	h.broker.ListAllData()
+
+	// Respond with success
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	response := map[string]string{
+		"message": "Get operation successful",
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
 // Assign the given key-value pair to the least loaded store
 func (h *BrokerHandler) SetHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -56,8 +76,8 @@ func (h *BrokerHandler) SetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		key   string
-		value string
+		Key   string `json:"key"`
+		Value string `json:"value"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -68,8 +88,9 @@ func (h *BrokerHandler) SetHandler(w http.ResponseWriter, r *http.Request) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	// Perform the Set operation
-	if err := h.broker.SetKey(req.key, req.value); err != nil {
+	fmt.Println(req.Key)
+	fmt.Println(req.Value)
+	if err := h.broker.SetKey(req.Key, req.Value); err != nil {
 		http.Error(w, "Failed to set key-value pair: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -99,36 +120,38 @@ func (h *BrokerHandler) ListStoresHandler(w http.ResponseWriter, r *http.Request
 }
 
 // GetStoreHandler retrieves a specific store's load.
-func (h *BrokerHandler) GetStoreHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Only GET is allowed", http.StatusMethodNotAllowed)
-		return
-	}
+// func (h *BrokerHandler) GetStoreHandler(w http.ResponseWriter, r *http.Request) {
+// 	if r.Method != http.MethodGet {
+// 		http.Error(w, "Only GET is allowed", http.StatusMethodNotAllowed)
+// 		return
+// 	}
 
-	storeName := r.URL.Query().Get("name")
-	if storeName == "" {
-		http.Error(w, "Missing 'name' query parameter", http.StatusBadRequest)
-		return
-	}
+// 	storeName := r.URL.Query().Get("name")
+// 	if storeName == "" {
+// 		http.Error(w, "Missing 'name' query parameter", http.StatusBadRequest)
+// 		return
+// 	}
 
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+// 	h.mu.RLock()
+// 	defer h.mu.RUnlock()
 
-	store, err := h.broker.GetStore(storeName)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Store not found: %v", err), http.StatusNotFound)
-		return
-	}
+// 	store, err := h.broker.GetStore(storeName)
+// 	if err != nil {
+// 		http.Error(w, fmt.Sprintf("Store not found: %v", err), http.StatusNotFound)
+// 		return
+// 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"load": h.broker.loads[store.Name()]})
-}
+// 	w.Header().Set("Content-Type", "application/json")
+// 	json.NewEncoder(w).Encode(map[string]int{"load": h.broker.loads[store.Name()]})
+// }
 
 // SetupRoutes sets up HTTP routes for the broker.
 func (h *BrokerHandler) SetupRoutes() {
 	http.HandleFunc("/set", h.SetHandler)
+	http.HandleFunc("/get", h.GetHandler)
+	http.HandleFunc("/getall", h.GetAllHandler)
 	http.HandleFunc("/stores/list", h.ListStoresHandler)
-	http.HandleFunc("/stores/get", h.GetStoreHandler)
+	// http.HandleFunc("/stores/get", h.GetStoreHandler)
 }
 
 type KVStoreConfig struct {
@@ -160,7 +183,7 @@ func (h *BrokerHandler) ConfigurePeers() {
 
 func main() {
 	// Initialize the broker
-	b := NewBroker()
+	b := broker.NewBroker()
 
 	// Load KVStore configurations from the JSON file
 	configs, err := LoadKVStoresConfig("kvstores_config.json")

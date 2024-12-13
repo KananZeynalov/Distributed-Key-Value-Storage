@@ -7,7 +7,7 @@ import (
 
 func TestKVStore_SetAndGetMultipleValues(t *testing.T) {
 	broker := broker.NewBroker()
-	broker.CreateStore("teststore")
+	broker.CreateStore("teststore", "")
 	broker.SetKey("key1", "value1")
 	broker.SetKey("key2", "value2")
 

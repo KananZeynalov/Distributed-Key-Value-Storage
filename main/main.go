@@ -11,7 +11,7 @@ import (
 func main() {
 	broker := broker.NewBroker()
 	// Initialize default KVStore and add to broker
-	err := broker.CreateStore("default")
+	err := broker.CreateStore("default", "ip")
 	if err != nil {
 		fmt.Println("Error creating default store:", err)
 		return
@@ -98,7 +98,10 @@ func main() {
 			var storeName string
 			fmt.Println("Enter the name of the new store:")
 			fmt.Scanln(&storeName)
-			err := broker.CreateStore(storeName)
+			var ip string
+			fmt.Println("Enter the ip of the new store:")
+			fmt.Scanln(&ip)
+			err := broker.CreateStore(storeName, ip)
 			if err != nil {
 				fmt.Println("Error creating new store:", err)
 			} else {

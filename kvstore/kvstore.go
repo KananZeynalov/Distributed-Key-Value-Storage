@@ -27,10 +27,14 @@ func NewKVStore(name string, ip_address string) *KVStore {
 }
 
 // Set inserts or updates the value for a given key.
-func (s *KVStore) Set(key, value string) {
+func (s *KVStore) Set(key, value string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if key == "" {
+		return errors.New("key cannot be empty")
+	}
 	s.data[key] = value
+	return nil
 }
 
 // Get retrieves the value associated with the given key.

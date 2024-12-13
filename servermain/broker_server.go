@@ -198,6 +198,10 @@ func main() {
 		}
 	}
 
+	// Pair the stores
+	b.PairKVStores()
+	b.DisplayPeers()
+
 	// Create a new BrokerHandler
 	handler := NewBrokerHandler(b)
 

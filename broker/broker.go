@@ -59,18 +59,12 @@ func (b *Broker) LoadSnapshot() error {
 	return nil
 }
 
-// Pair represents a pair of KVStores
-type Pair struct {
-	Store1 *kvstore.KVStore
-	Store2 *kvstore.KVStore
-}
-
 // Broker manages multiple KVStore instances and handles load balancing.
 type Broker struct {
 	mu     sync.RWMutex
 	stores map[string]*kvstore.KVStore
 	loads  map[string]int // Simple load metric: number of operations handled
-	pairs  []Pair
+	peers  map[string]*kvstore.KVStore
 }
 
 // NewBroker initializes and returns a new Broker instance.
@@ -78,6 +72,7 @@ func NewBroker() *Broker {
 	return &Broker{
 		stores: make(map[string]*kvstore.KVStore),
 		loads:  make(map[string]int),
+		peers:  make(map[string]*kvstore.KVStore),
 	}
 }
 
@@ -251,29 +246,29 @@ func (b *Broker) ListAllData() error {
 }
 
 // PairKVStores pairs the existing KVStores and stores them in a slice of pairs
-func (b *Broker) PairKVStores() ([]Pair, error) {
+func (b *Broker) PairKVStores() error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	if len(b.stores) < 2 {
-		return nil, errors.New("not enough stores to create pairs")
+		return errors.New("not enough stores to create pairs")
 	}
 
-	var pairs []Pair
-	storeNames := make([]string, 0, len(b.stores))
-	for name := range b.stores {
-		storeNames = append(storeNames, name)
+	stores := make([]*kvstore.KVStore, 0, len(b.stores))
+	for _, store := range b.stores {
+		stores = append(stores, store)
 	}
 
 	// Pairing logic
-	//for i := 0; i < len(storeNames); i++ {
-	//	for j := i + 1; j < len(storeNames); j++ {
-	//		pairs = append(pairs, Pair{
-	//			Store1: storeNames[i],
-	//			Store2: storeNames[j],
-	//		})
-	//	}
-	//}
+	for i := 0; i < len(stores); i++ {
+		b.peers[stores[i].Name()] = stores[(i+1)%len(stores)]
+	}
 
-	return pairs, nil
+	return nil
+}
+
+func (b *Broker) DisplayPeers() {
+	for name, store := range b.peers {
+		fmt.Println("Snapshot of " + name + " is in " + store.Name())
+	}
 }

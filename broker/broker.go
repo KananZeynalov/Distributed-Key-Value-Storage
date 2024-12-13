@@ -88,7 +88,7 @@ func (b *Broker) CreateStore(name string) error {
 	if _, exists := b.stores[name]; exists {
 		return errors.New("store with this name already exists")
 	}
-	store := kvstore.NewKVStore(name, b)
+	store := kvstore.NewKVStore(name)
 	b.stores[name] = store
 	b.loads[name] = 0
 	return nil

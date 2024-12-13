@@ -240,6 +240,20 @@ func (b *Broker) LoadStoreFromSnapshot(storename string, filename string) {
 	}
 }
 
+func (b *Broker) GetAllData() []string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	var allData []string
+	for name, store := range b.stores {
+		data := store.GetAllData()
+		for k, v := range data {
+			allData = append(allData, fmt.Sprintf("Store: %s, Key: %s, Value: %s", name, k, v))
+		}
+	}
+	return allData
+}
+
 func (b *Broker) ListAllData() error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

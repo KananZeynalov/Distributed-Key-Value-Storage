@@ -57,15 +57,14 @@ func (h *BrokerHandler) GetAllHandler(w http.ResponseWriter, r *http.Request) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	// Perform the Get operation
-	h.broker.ListAllData()
+	data := h.broker.GetAllData()
 
 	// Respond with success
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
-	response := map[string]string{
-		"message": "Get operation successful",
-	}
-	json.NewEncoder(w).Encode(response)
+	// response := map[string]string{data}
+	json.NewEncoder(w).Encode(data)
+
 }
 
 // Assign the given key-value pair to the least loaded store
@@ -88,8 +87,6 @@ func (h *BrokerHandler) SetHandler(w http.ResponseWriter, r *http.Request) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	fmt.Println(req.Key)
-	fmt.Println(req.Value)
 	if err := h.broker.SetKey(req.Key, req.Value); err != nil {
 		http.Error(w, "Failed to set key-value pair: "+err.Error(), http.StatusInternalServerError)
 		return

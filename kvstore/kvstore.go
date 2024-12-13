@@ -71,6 +71,19 @@ func (s *KVStore) PrintData() {
 	fmt.Println(s.data)
 }
 
+// GetAllData returns a copy of the entire data map.
+func (s *KVStore) GetAllData() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Create a copy of the data map to avoid race conditions
+	dataCopy := make(map[string]string)
+	for key, value := range s.data {
+		dataCopy[key] = value
+	}
+	return dataCopy
+}
+
 // SaveToDisk saves the in-memory data to a file in JSON format.
 func (s *KVStore) SaveToDisk() error {
 	s.mu.RLock()

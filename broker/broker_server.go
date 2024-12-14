@@ -1,9 +1,8 @@
-package main
+package broker
 
 import (
 	"encoding/json"
 	"fmt"
-	"kv/broker"
 	"net/http"
 	"os"
 	"sync"
@@ -11,28 +10,40 @@ import (
 
 // Wraps a broker to expose it via HTTP.
 type BrokerHandler struct {
-	broker *broker.Broker
+	broker *Broker
 	mu     sync.RWMutex
 }
 
+// GetBroker returns the broker instance.
+func (h *BrokerHandler) GetBroker() *Broker {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.broker
+}
+
 // Creates a new BrokerHandler instance.
-func NewBrokerHandler(b *broker.Broker) *BrokerHandler {
+func NewBrokerHandler(b *Broker) *BrokerHandler {
 	return &BrokerHandler{broker: b}
 }
 
 // SetupRoutes sets up HTTP routes for the broker.
 func (h *BrokerHandler) SetupRoutes() {
+	//kv store basic operations
 	http.HandleFunc("/set", h.SetHandler)
 	http.HandleFunc("/get", h.GetHandler)
 	http.HandleFunc("/getall", h.GetAllHandler)
 	http.HandleFunc("/stores/list", h.ListStoresHandler)
-	// http.HandleFunc("/stores/get", h.GetStoreHandler)
 	http.HandleFunc("/delete", h.DeleteHandler)
-	http.HandleFunc("/snapshot/enable", h.EnableSnapshotHandler)
-	http.HandleFunc("/store/new", h.NewKVHandler)
-	http.HandleFunc("/snapshot/manual", h.ManualSnapshotHandler)
-	http.HandleFunc("/snapshot/broker", h.SnapshotBrokerHandler)
 
+	//kv store snapshot operations
+	http.HandleFunc("/kvstore/snapshot/manual", h.ManualSnapshotHandler)
+	http.HandleFunc("/kvstore/snapshot/periodic", h.SnapshotKVStoreHandler)
+	// http.HandleFunc("/kvstore/snapshot/load", h.LoadKVSToreSnapshotHandler) TODO: Implement this
+	http.HandleFunc("/kvstore/new", h.NewKVHandler)
+
+	//broker snapshot operations
+	http.HandleFunc("/broker/snapshot/periodic", h.SnapshotBrokerHandler)
+	// http.HandleFunc("/broker/snapshot/load", h.LoadBrokerSnapshotHandler) TODO: Implement this
 }
 
 // Get the value of the given key
@@ -188,8 +199,8 @@ func (h *BrokerHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// EnableSnapshotHandler: POST /snapshot/enable { "storename": "...", "interval": <seconds> }
-func (h *BrokerHandler) EnableSnapshotHandler(w http.ResponseWriter, r *http.Request) {
+// SnapshotKVStoreHandler: POST /snapshot/enable { "storename": "...", "interval": <seconds> }
+func (h *BrokerHandler) SnapshotKVStoreHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST is allowed", http.StatusMethodNotAllowed)
 		return
@@ -271,40 +282,6 @@ func (h *BrokerHandler) ManualSnapshotHandler(w http.ResponseWriter, r *http.Req
 		"message": "Manual snapshot successful",
 	}
 	jsonResponse(w, response)
-}
-
-func main() {
-	// Initialize the broker
-	b := broker.NewBroker()
-
-	err := b.StartPeering()
-
-	// Load KVStore configurations from the JSON file
-	configs, err := LoadKVStoresConfig("kvstores_config.json")
-	if err != nil {
-		panic("Failed to load KVStore configurations: " + err.Error())
-	}
-
-	// Initialize and add stores to the broker
-	for _, config := range configs {
-		if err := b.CreateStore(config.Name, config.IPAddress); err != nil {
-			panic("Failed to add store: " + err.Error())
-		}
-	}
-
-	// Create a new BrokerHandler
-	handler := NewBrokerHandler(b)
-
-	// Setup HTTP routes
-	handler.SetupRoutes()
-
-	handler.broker.GetList().DisplayForward()
-
-	// Start the HTTP server
-	fmt.Println("Starting broker web server on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Println("Error starting server:", err)
-	}
 }
 
 // SnapshotBrokerHandler: POST /snapshot/broker

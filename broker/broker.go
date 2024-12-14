@@ -279,7 +279,7 @@ func (b *Broker) GetKey(key string) (string, error) {
 
 	if b.peerlist.Head == nil {
 		fmt.Println("List is empty")
-		return "", errors.New("List is empty")
+		return "", errors.New("list is empty")
 	}
 
 	current := b.peerlist.Head
@@ -306,8 +306,8 @@ func (b *Broker) SetKey(key string, value string) error {
 		fmt.Println("Error retrieving store:", err)
 		return fmt.Errorf("failed to retrieve the least loaded store: %w", err)
 	}
-	store.Set(key, value)
 
+	err = store.Set(key, value)
 	if err != nil {
 		fmt.Println("Error setting key:", err)
 		return fmt.Errorf("failed to retrieve the least loaded store: %w", err)

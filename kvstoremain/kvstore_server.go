@@ -145,12 +145,76 @@ func (h *KVStoreHandler) GetAllDataHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *KVStoreHandler) SetupRoutes() {
+	//key value store routes
 	http.HandleFunc("/get", h.GetHandler)
 	http.HandleFunc("/set", h.SetHandler)
 	http.HandleFunc("/name", h.GetNameHandler)
 	http.HandleFunc("/getall", h.GetAllDataHandler)
-	http.HandleFunc("/notify", h.PeerNotificationHandler)
-	http.HandleFunc("/peer-backup", h.PeerBackupHandler)
+
+	//peering routes
+	http.HandleFunc("/notify", h.PeerNotificationHandler) //comes from broker, when it tells you who your peer is
+	http.HandleFunc("/peer-dead", h.PeerDeadHandler)      //comes from broker, when your peer is dead. then you load peers data from disk
+	http.HandleFunc("/peer-backup", h.PeerBackupHandler)  //comes from peer, when this comes you send all your data in response field
+
+	//snapshot routes
+	http.HandleFunc("/save", h.SaveToDiskHandler)
+	http.HandleFunc("/load", h.LoadFromDiskHandler)
+	http.HandleFunc("/start-snapshots", h.StartPeriodicSnapshotsHandler)
+
+}
+
+func (h *KVStoreHandler) PeerDeadHandler(w http.ResponseWriter, r *http.Request) {
+	var requestData map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if err := h.kvstore.LoadAndMergeFromDisk(); err != nil {
+		http.Error(w, "Failed to load data from peer backup", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]string{"status": "Data successfully loaded from peer backup"}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func RequestPeerBackup(peerURL string) {
+	resp, err := http.Get(peerURL + "/peer-backup")
+	if err != nil {
+		fmt.Println("Error sending request to peer-backup:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("Error response from peer-backup:", resp.Status)
+		return
+	}
+
+	var data map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		fmt.Println("Error decoding response data:", err)
+		return
+	}
+
+	file, err := os.Create("peer.snapshot.json")
+	if err != nil {
+		fmt.Println("Error creating snapshot file:", err)
+		return
+	}
+	defer file.Close()
+
+	if err := json.NewEncoder(file).Encode(data); err != nil {
+		fmt.Println("Error encoding data to snapshot file:", err)
+		return
+	}
+
+	fmt.Println("Data successfully saved to peer.snapshot.json")
 }
 
 func (h *KVStoreHandler) PeerBackupHandler(w http.ResponseWriter, r *http.Request) {

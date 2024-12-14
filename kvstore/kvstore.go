@@ -18,6 +18,39 @@ type KVStore struct {
 	peer_ip    string
 }
 
+// LoadAndMergeFromDisk loads data from a file and merges it with the existing in-memory key-value store.
+func (s *KVStore) LoadAndMergeFromDisk() error {
+	// Open the snapshot file
+	filename := "peer.snapshot.json"
+	file, err := os.Open(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("Snapshot file does not exist. No data to merge.")
+			return nil
+		}
+		return fmt.Errorf("failed to open snapshot file: %w", err)
+	}
+	defer file.Close()
+
+	// Deserialize the JSON data into a temporary map
+	var data map[string]string
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&data)
+	if err != nil {
+		return fmt.Errorf("failed to decode JSON data: %w", err)
+	}
+
+	// Merge the temporary map with the in-memory store
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, value := range data {
+		s.data[key] = value
+	}
+
+	fmt.Println("Data successfully loaded and merged from disk:", filename)
+	return nil
+}
+
 // NewKVStore initializes and returns a new KVStore instance.
 func NewKVStore(name string, ip_address string) *KVStore {
 	return &KVStore{

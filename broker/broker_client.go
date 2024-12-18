@@ -169,7 +169,7 @@ func NotifyPeersOfEachOther(ll *LinkedList) {
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		client := &http.Client{Timeout: 5 * time.Second} // Set timeout to prevent hanging requests
+		client := &http.Client{Timeout: 10 * time.Second} // Set timeout to prevent hanging requests
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Printf("Error sending request to %s: %v\n", ipAddr, err)

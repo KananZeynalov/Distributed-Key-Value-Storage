@@ -52,11 +52,11 @@ func (s *KVStore) LoadAndMergeFromDisk() error {
 }
 
 // NewKVStore initializes and returns a new KVStore instance.
-func NewKVStore(name string, IPAddress string) *KVStore {
+func NewKVStore(name string, port string) *KVStore {
 	return &KVStore{
 		data:       make(map[string]string),
 		Name:       name,
-		IPAddress: IPAddress,
+        IPAddress: fmt.Sprintf("localhost:%s", port), // Set correct address format
 	}
 }
 

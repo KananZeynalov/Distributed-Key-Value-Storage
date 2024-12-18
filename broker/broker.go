@@ -335,35 +335,37 @@ func (b *Broker) ManualSnapshotStore() error {
 }
 
 func (b *Broker) GetKey(key string) (string, error) {
-	store, err := b.GetLeastLoadedStore()
-	if err != nil {
-		return "", err
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	// Iterate over all KVStores to find the key
+	for _, store := range b.stores {
+		url := fmt.Sprintf("http://%s/get?key=%s", store.IPAddress, key)
+		resp, err := http.Get(url)
+		if err != nil {
+			fmt.Printf("Error contacting KVStore at %s: %v\n", store.IPAddress, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			var result map[string]string
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				fmt.Printf("Error decoding response from KVStore at %s: %v\n", store.IPAddress, err)
+				continue
+			}
+
+			// Found the key, return the value
+			if value, ok := result["value"]; ok {
+				fmt.Printf("Key '%s' found in KVStore: %s\n", key, store.IPAddress)
+				return value, nil
+			}
+		}
 	}
 
-	url := fmt.Sprintf("http://%s/get?key=%s", store.IPAddress, key)
-	resp, err := http.Get(url)
-	if err != nil {
-		return "", fmt.Errorf("error contacting KVStore at %s: %w", store.IPAddress, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("KVStore returned status: %d", resp.StatusCode)
-	}
-
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
-	}
-
-	value, ok := result["value"]
-	if !ok {
-		return "", errors.New("value not found in KVStore response")
-	}
-
-	b.IncrementLoad(store.Name)
-	return value, nil
+	return "", fmt.Errorf("key '%s' not found in any KVStore", key)
 }
+
 
 func (b *Broker) SetKey(key string, value string) error {
 	store, err := b.GetLeastLoadedStore()
@@ -391,15 +393,19 @@ func (b *Broker) SetKey(key string, value string) error {
 		return fmt.Errorf("KVStore returned status: %d", resp.StatusCode)
 	}
 
+	// Log which store was used
+	fmt.Printf("Key '%s' set in KVStore: %s\n", key, store.IPAddress)
+
 	b.IncrementLoad(store.Name)
 	return nil
 }
 
-// DeleteKey deletes a key by sending a request to all KVStores via HTTP.
+// DeleteKey deletes a key by querying all KVStores or the known KVStore where the key is stored.
 func (b *Broker) DeleteKey(key string) bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
+	// Check each store for the key and delete it
 	for _, store := range b.stores {
 		url := fmt.Sprintf("http://%s/delete", store.IPAddress)
 		data := map[string]string{
@@ -407,25 +413,31 @@ func (b *Broker) DeleteKey(key string) bool {
 		}
 		jsonData, err := json.Marshal(data)
 		if err != nil {
-			log.Printf("Error marshalling delete request: %v", err)
+			log.Printf("Error marshalling delete request: %v\n", err)
 			continue
 		}
 
 		resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
-			log.Printf("Error contacting KVStore at %s: %v", store.IPAddress, err)
+			log.Printf("Error contacting KVStore at %s: %v\n", store.IPAddress, err)
 			continue
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode == http.StatusOK {
+			// Successfully deleted the key
+			log.Printf("Key '%s' successfully deleted from KVStore at %s\n", key, store.IPAddress)
 			b.ResetLoad(store.Name)
 			return true
+		} else {
+			log.Printf("Failed to delete key '%s' from KVStore at %s, status code: %d\n", key, store.IPAddress, resp.StatusCode)
 		}
 	}
 
+	log.Printf("Key '%s' not found in any KVStore.\n", key)
 	return false
 }
+
 
 func (b *Broker) LoadStoreFromSnapshot(storename string, filename string) {
 	store, err := b.GetStore(storename)

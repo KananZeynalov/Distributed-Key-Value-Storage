@@ -10,21 +10,8 @@ func main() {
 	// Initialize the broker
 	b := broker.NewBroker()
 
-	// Load KVStore configurations from the JSON file
-	configs, err := broker.LoadKVStoresConfig("kvstores_config.json")
-	if err != nil {
-		panic("Failed to load KVStore configurations: " + err.Error())
-	}
-	
-
-	// Initialize and add stores to the broker
-	for _, config := range configs {
-		if err := b.CreateStore(config.Name, config.IPAddress); err != nil {
-			panic("Failed to add store: " + err.Error())
-		}
-	}
-
-	err = b.StartPeering()
+	// Start peering
+	err := b.StartPeering()
 	if err != nil {
 		panic("Failed to start peering: " + err.Error())
 	}
@@ -35,6 +22,7 @@ func main() {
 	// Setup HTTP routes
 	handler.SetupRoutes()
 
+	// Display the peer list (initially empty)
 	handler.GetBroker().GetList().DisplayForward()
 
 	// Start the HTTP server

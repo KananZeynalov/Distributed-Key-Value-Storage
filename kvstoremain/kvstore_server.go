@@ -298,7 +298,7 @@ func main() {
 		fmt.Println("BROKER_URL environment variable not set")
 		os.Exit(1)
 	}
-	err := RegisterWithBroker(brokerURL, kvname, fmt.Sprintf("localhost:%s", port))
+err := RegisterWithBroker(brokerURL, kvname, fmt.Sprintf("localhost:%s", port))
 	if err != nil {
 		fmt.Println("Failed to register with Broker:", err)
 		os.Exit(1)

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
+	//"os"
 	"sync"
 )
 
@@ -152,33 +152,33 @@ func (h *BrokerHandler) ListStoresHandler(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(stores)
 }
 
-type KVStoreConfig struct {
-	Name      string `json:"Name"`
-	IPAddress string `json:"IPAddress"`
-}
+// type KVStoreConfig struct {
+// 	Name      string `json:"Name"`
+// 	IPAddress string `json:"IPAddress"`
+// }
 
-func LoadKVStoresConfig(filepath string) ([]KVStoreConfig, error) {
-    fmt.Printf("Loading KVStore configurations from file: %s\n", filepath)
+// func LoadKVStoresConfig(filepath string) ([]KVStoreConfig, error) {
+//     fmt.Printf("Loading KVStore configurations from file: %s\n", filepath)
 
-    file, err := os.Open(filepath)
-    if err != nil {
-        return nil, fmt.Errorf("failed to open config file: %w", err)
-    }
-    defer file.Close()
+//     file, err := os.Open(filepath)
+//     if err != nil {
+//         return nil, fmt.Errorf("failed to open config file: %w", err)
+//     }
+//     defer file.Close()
 
-    var configs []KVStoreConfig
-    decoder := json.NewDecoder(file)
-    if err := decoder.Decode(&configs); err != nil {
-        return nil, fmt.Errorf("failed to decode config file: %w", err)
-    }
+//     var configs []KVStoreConfig
+//     decoder := json.NewDecoder(file)
+//     if err := decoder.Decode(&configs); err != nil {
+//         return nil, fmt.Errorf("failed to decode config file: %w", err)
+//     }
 
-    fmt.Println("Loaded KVStore configurations:")
-    for _, config := range configs {
-        fmt.Printf("  Name: %s, IP Address: %s\n", config.Name, config.IPAddress)
-    }
+//     fmt.Println("Loaded KVStore configurations:")
+//     for _, config := range configs {
+//         fmt.Printf("  Name: %s, IP Address: %s\n", config.Name, config.IPAddress)
+//     }
 
-    return configs, nil
-}
+//     return configs, nil
+// }
 
 
 // DeleteHandler: POST /delete { "key": "..." }

@@ -9,7 +9,10 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"bytes"
 )
+
+
 
 func LoadKVStoresConfig(filePath string) ([]KVStoreConfig, error) {
 	file, err := os.Open(filePath)
@@ -226,7 +229,7 @@ func (h *KVStoreHandler) PeerBackupHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *KVStoreHandler) GetNameHandler(w http.ResponseWriter, r *http.Request) {
-	response := map[string]string{"name": h.kvstore.Name()}
+	response := map[string]string{"name": h.kvstore.Name}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -244,7 +247,12 @@ func (h *KVStoreHandler) PeerNotificationHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Handle the peer IP as needed, e.g., store it, initiate replication, etc.
 	h.kvstore.SetPeerIP(peerIP)
+
+	// Optionally, respond with acknowledgment
+	response := map[string]string{"message": "Peer notified successfully"}
+	jsonResponse(w, response)
 }
 
 func (h *KVStoreHandler) StartPeriodicSnapshotsHandler(w http.ResponseWriter, r *http.Request) {
@@ -267,6 +275,7 @@ func (h *KVStoreHandler) StartPeriodicSnapshotsHandler(w http.ResponseWriter, r 
 	json.NewEncoder(w).Encode(response)
 }
 
+
 func main() {
 
 	if len(os.Args) < 3 {
@@ -283,9 +292,46 @@ func main() {
 	// Setup HTTP routes
 	handler.SetupRoutes()
 
+	// Register with Broker
+	brokerURL := os.Getenv("BROKER_URL") // e.g., "http://localhost:8080/register"
+	if brokerURL == "" {
+		fmt.Println("BROKER_URL environment variable not set")
+		os.Exit(1)
+	}
+	err := RegisterWithBroker(brokerURL, kvname, kvStoreInstance.IPAddress)
+	if err != nil {
+		fmt.Println("Failed to register with Broker:", err)
+		os.Exit(1)
+	}
+
 	// Start the HTTP server
 	fmt.Printf("Starting KVStore web server on :%s\n", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		fmt.Println("Error starting server:", err)
 	}
 }
+
+// RegisterWithBroker sends a registration request to the Broker.
+func RegisterWithBroker(brokerURL, name, ip string) error {
+	data := map[string]string{
+		"name":       name,
+		"ip_address": ip,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post(brokerURL, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to register with broker, status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+

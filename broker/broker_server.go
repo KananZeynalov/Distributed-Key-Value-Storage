@@ -26,6 +26,12 @@ func NewBrokerHandler(b *Broker) *BrokerHandler {
 	return &BrokerHandler{broker: b}
 }
 
+type RegisterRequest struct {
+	Name      string `json:"name"`
+	IPAddress string `json:"ip_address"`
+}
+
+
 // SetupRoutes sets up HTTP routes for the broker.
 func (h *BrokerHandler) SetupRoutes() {
 	//kv store basic operations
@@ -44,6 +50,8 @@ func (h *BrokerHandler) SetupRoutes() {
 	//broker snapshot operations
 	http.HandleFunc("/broker/snapshot/periodic", h.SnapshotBrokerHandler)
 	// http.HandleFunc("/broker/snapshot/load", h.LoadBrokerSnapshotHandler) TODO: Implement this
+	http.HandleFunc("/register", h.RegisterHandler)
+
 }
 
 // Get the value of the given key
@@ -238,8 +246,8 @@ func (h *BrokerHandler) NewKVHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name      string `json:"name"`
-		IPAddress string `json:"ip_address"`
+		Name      string `json:"Name"`
+		IPAddress string `json:"IPAddress"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -309,4 +317,34 @@ func (h *BrokerHandler) SnapshotBrokerHandler(w http.ResponseWriter, r *http.Req
 func jsonResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
+}
+
+// RegisterHandler handles registration of KVStore instances
+func (h *BrokerHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST is allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req RegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Create the store in the Broker
+	err := h.broker.CreateStore(req.Name, req.IPAddress)
+	if err != nil {
+		http.Error(w, "Failed to create store: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Optionally, notify existing peers about the new store
+	NotifyPeersOfEachOther(h.broker.peerlist)
+
+	// Respond with success
+	response := map[string]string{
+		"message": "Store registered successfully",
+	}
+	jsonResponse(w, response)
 }

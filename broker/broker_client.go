@@ -67,8 +67,8 @@ func getKeyValue(url string, key string) (string, error) {
 	return value, nil
 }
 
+// NotifyPeersOfEachOther sends notifications to all peers about each other via HTTP.
 func NotifyPeersOfEachOther(ll *LinkedList) {
-
 	current := ll.Head
 	if ll.Head == nil {
 		fmt.Println("List is empty")
@@ -104,7 +104,7 @@ func NotifyPeersOfEachOther(ll *LinkedList) {
 				current = current.Next
 				continue
 			}
-			defer resp.Body.Close()
+			resp.Body.Close()
 
 			if resp.StatusCode != http.StatusOK {
 				fmt.Printf("Failed to notify peer, status code: %d\n", resp.StatusCode)

@@ -13,9 +13,9 @@ import (
 type KVStore struct {
 	mu         sync.RWMutex
 	data       map[string]string
-	name       string
-	ip_address string
-	peer_ip    string
+	Name       string
+	IPAddress string
+	PeerIP    string
 }
 
 // LoadAndMergeFromDisk loads data from a file and merges it with the existing in-memory key-value store.
@@ -52,26 +52,26 @@ func (s *KVStore) LoadAndMergeFromDisk() error {
 }
 
 // NewKVStore initializes and returns a new KVStore instance.
-func NewKVStore(name string, ip_address string) *KVStore {
+func NewKVStore(name string, IPAddress string) *KVStore {
 	return &KVStore{
 		data:       make(map[string]string),
-		name:       name,
-		ip_address: ip_address,
+		Name:       name,
+		IPAddress: IPAddress,
 	}
 }
 
 // SetPeerIP sets the peer IP address for the KVStore.
-func (s *KVStore) SetPeerIP(peer_ip string) {
+func (s *KVStore) SetPeerIP(PeerIP string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.peer_ip = peer_ip
+	s.PeerIP = PeerIP
 }
 
 // GetPeerIP returns the peer IP address for the KVStore.
 func (s *KVStore) GetPeerIP() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.peer_ip
+	return s.PeerIP
 }
 
 // Set inserts or updates the value for a given key.
@@ -111,11 +111,6 @@ func (s *KVStore) Delete(key string) error {
 	return nil
 }
 
-// Name returns the name of the KVStore.
-func (s *KVStore) Name() string {
-	return s.name
-}
-
 // PrintData prints the current in-memory data map.
 func (s *KVStore) PrintData() {
 	s.mu.RLock()
@@ -142,7 +137,7 @@ func (s *KVStore) SaveToDisk() error {
 	defer s.mu.RUnlock()
 
 	// Open or create the file for writing
-	filename := s.name + ".snapshot.json"
+	filename := s.Name + ".snapshot.json"
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot file: %w", err)
@@ -195,7 +190,7 @@ func (s *KVStore) StartPeriodicSnapshots(interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		filename := s.name + ".snapshot.json"
+		filename := s.Name + ".snapshot.json"
 		for range ticker.C {
 			err := s.SaveToDisk()
 			if err != nil {

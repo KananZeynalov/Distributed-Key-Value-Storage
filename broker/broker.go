@@ -8,7 +8,8 @@ import (
 	"log"
 	"os"
 	"sync"
-	"time"
+	"net/http"
+	"bytes"
 )
 
 func (b *Broker) StartPeering() error {
@@ -84,7 +85,7 @@ func (b *Broker) LoadSnapshot() error {
 
 	for name, load := range data.Stores {
 		if store, exists := b.stores[name]; exists {
-			b.loads[store.Name()] = load
+			b.loads[store.Name] = load
 		}
 	}
 
@@ -168,33 +169,65 @@ func (ll *LinkedList) RemoveNode(name string) error {
 	return fmt.Errorf("node with name %s not found", name)
 }
 
-// CreateStore creates a new KVStore with the given name and adds it to the broker.
 func (b *Broker) CreateStore(name string, ip_address string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, exists := b.stores[name]; exists {
 		return errors.New("store with this name already exists")
 	}
-	store := kvstore.NewKVStore(name, ip_address)
+	
+	// Instead of creating an in-process KVStore, assume it's already running and registered via HTTP
+	// Add to stores and peerlist
+	store := &kvstore.KVStore{
+		Name:      name,
+		IPAddress: ip_address,
+	}
 	b.stores[name] = store
 	b.loads[name] = 0
 
 	b.peerlist.AddNode(name, ip_address)
+	
+	// Notify existing stores about the new store
+	NotifyPeersOfEachOther(b.peerlist)
+	
 	return nil
 }
 
-// RemoveStore removes a KVStore from the broker.
+
 func (b *Broker) RemoveStore(name string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, exists := b.stores[name]; !exists {
+	
+	store, exists := b.stores[name]
+	if !exists {
 		return errors.New("store not found")
 	}
+	
 	delete(b.stores, name)
 	delete(b.loads, name)
 	b.peerlist.RemoveNode(name)
+	
+	// Notify remaining stores about the removal
+	NotifyPeersOfEachOther(b.peerlist)
+	
+	// Optionally, send a delete request to the KVStore to gracefully shut it down
+	url := fmt.Sprintf("http://%s/shutdown", store.IPAddress)
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		log.Printf("Error creating shutdown request for store %s: %v", name, err)
+		return nil // Continue even if shutdown request fails
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error sending shutdown request to store %s: %v", name, err)
+		return nil
+	}
+	resp.Body.Close()
+	
 	return nil
 }
+
 
 // GetLeastLoadedStore returns the name of the store with the least load.
 func (b *Broker) GetLeastLoadedStore() (*kvstore.KVStore, error) {
@@ -267,66 +300,112 @@ func (b *Broker) ManualSnapshotStore() error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	for name, store := range b.stores {
-		err := store.SaveToDisk()
+		url := fmt.Sprintf("http://%s/save", store.IPAddress)
+		resp, err := http.Post(url, "application/json", nil)
 		if err != nil {
-			return fmt.Errorf("failed to save snapshot for store %s: %v", name, err)
+			log.Printf("Failed to send manual snapshot request to store %s: %v", name, err)
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("Store %s responded with status: %d", name, resp.StatusCode)
+		} else {
+			log.Printf("Manual snapshot triggered for store %s successfully.", name)
 		}
 	}
 	return nil
 }
 
 func (b *Broker) GetKey(key string) (string, error) {
-
-	if b.peerlist.Head == nil {
-		fmt.Println("List is empty")
-		return "", errors.New("list is empty")
+	store, err := b.GetLeastLoadedStore()
+	if err != nil {
+		return "", err
 	}
 
-	current := b.peerlist.Head
-	for {
-		//TODO
-		val, err := b.stores[current.Name].Get(key)
-		if err == nil {
-			fmt.Println("Value:", val)
-			return val, nil
-		}
-		current = current.Next
-		if current == b.peerlist.Head {
-			break // Completed a full circle
-		}
+	url := fmt.Sprintf("http://%s/get?key=%s", store.IPAddress, key)
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("error contacting KVStore at %s: %w", store.IPAddress, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("KVStore returned status: %d", resp.StatusCode)
 	}
 
-	fmt.Println("Key not found in any store")
-	return "", errors.New("key not found in any store")
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	value, ok := result["value"]
+	if !ok {
+		return "", errors.New("value not found in KVStore response")
+	}
+
+	b.IncrementLoad(store.Name)
+	return value, nil
 }
 
 func (b *Broker) SetKey(key string, value string) error {
 	store, err := b.GetLeastLoadedStore()
 	if err != nil {
-		fmt.Println("Error retrieving store:", err)
-		return fmt.Errorf("failed to retrieve the least loaded store: %w", err)
+		return fmt.Errorf("no available KVStore: %w", err)
 	}
 
-	err = store.Set(key, value)
-	if err != nil {
-		fmt.Println("Error setting key:", err)
-		return fmt.Errorf("failed to retrieve the least loaded store: %w", err)
+	url := fmt.Sprintf("http://%s/set", store.IPAddress)
+	data := map[string]string{
+		"key":   key,
+		"value": value,
 	}
-	b.IncrementLoad(store.Name())
-	fmt.Println("Set operation successful.")
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("error contacting KVStore at %s: %w", store.IPAddress, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("KVStore returned status: %d", resp.StatusCode)
+	}
+
+	b.IncrementLoad(store.Name)
 	return nil
 }
 
+// DeleteKey deletes a key by sending a request to all KVStores via HTTP.
 func (b *Broker) DeleteKey(key string) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
 	for _, store := range b.stores {
-		err := store.Delete(key)
-		if err == nil {
-			b.ResetLoad(store.Name())
-			fmt.Println("Delete operation successful.")
+		url := fmt.Sprintf("http://%s/delete", store.IPAddress)
+		data := map[string]string{
+			"key": key,
+		}
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			log.Printf("Error marshalling delete request: %v", err)
+			continue
+		}
+
+		resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Error contacting KVStore at %s: %v", store.IPAddress, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			b.ResetLoad(store.Name)
 			return true
 		}
 	}
-	fmt.Println("Key not found in any store")
+
 	return false
 }
 
@@ -336,13 +415,31 @@ func (b *Broker) LoadStoreFromSnapshot(storename string, filename string) {
 		fmt.Println("Error retrieving store:", err)
 		return
 	}
-	err = store.LoadFromDisk(filename)
+	
+	url := fmt.Sprintf("http://%s/load", store.IPAddress)
+	data := map[string]string{
+		"filename": filename,
+	}
+	jsonData, err := json.Marshal(data)
 	if err != nil {
-		fmt.Println("Error loading data from disk:", err)
+		fmt.Printf("Error marshalling load snapshot request for store %s: %v\n", storename, err)
+		return
+	}
+	
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Printf("Error sending load snapshot request to store %s: %v\n", storename, err)
+		return
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Store %s responded with status: %d\n", storename, resp.StatusCode)
 	} else {
 		fmt.Println("Data loaded successfully from", filename)
 	}
 }
+
 
 func (b *Broker) GetAllData() []string {
 	b.mu.RLock()
@@ -350,7 +447,27 @@ func (b *Broker) GetAllData() []string {
 
 	var allData []string
 	for name, store := range b.stores {
-		data := store.GetAllData()
+		url := fmt.Sprintf("http://%s/getall", store.IPAddress)
+		resp, err := http.Get(url)
+		if err != nil {
+			log.Printf("Error contacting KVStore at %s: %v", store.IPAddress, err)
+			continue
+		}
+		
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("KVStore %s responded with status: %d", name, resp.StatusCode)
+			resp.Body.Close()
+			continue
+		}
+		
+		var data map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			log.Printf("Error decoding getall response from store %s: %v", name, err)
+			resp.Body.Close()
+			continue
+		}
+		resp.Body.Close()
+		
 		for k, v := range data {
 			allData = append(allData, fmt.Sprintf("Store: %s, Key: %s, Value: %s", name, k, v))
 		}
@@ -358,15 +475,42 @@ func (b *Broker) GetAllData() []string {
 	return allData
 }
 
+
+
 func (b *Broker) ListAllData() error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	for name, store := range b.stores {
 		fmt.Printf("Store: %s\n", name)
-		store.PrintData()
+		url := fmt.Sprintf("http://%s/getall", store.IPAddress)
+		resp, err := http.Get(url)
+		if err != nil {
+			fmt.Printf("Error contacting KVStore at %s: %v\n", store.IPAddress, err)
+			continue
+		}
+		
+		if resp.StatusCode != http.StatusOK {
+			fmt.Printf("KVStore %s responded with status: %d\n", name, resp.StatusCode)
+			resp.Body.Close()
+			continue
+		}
+		
+		var data map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			fmt.Printf("Error decoding getall response from store %s: %v\n", name, err)
+			resp.Body.Close()
+			continue
+		}
+		resp.Body.Close()
+		
+		for k, v := range data {
+			fmt.Printf("  Key: %s, Value: %s\n", k, v)
+		}
 	}
 	return nil
 }
+
+
 
 // DisplayForward displays the list from head to tail (circularly)
 func (ll *LinkedList) DisplayForward() {
@@ -395,7 +539,18 @@ func (b *Broker) EnablePeriodicSnapshots(storename string, intervalSeconds int) 
 	if err != nil {
 		return err
 	}
-	interval := time.Duration(intervalSeconds) * time.Second
-	store.StartPeriodicSnapshots(interval)
+	
+	url := fmt.Sprintf("http://%s/start-snapshots?interval=%d", store.IPAddress, intervalSeconds)
+	resp, err := http.Post(url, "application/json", nil)
+	if err != nil {
+		return fmt.Errorf("error sending start snapshots request to store %s: %w", storename, err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("store %s responded with status: %d", storename, resp.StatusCode)
+	}
+	
 	return nil
 }
+

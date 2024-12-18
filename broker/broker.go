@@ -170,28 +170,46 @@ func (ll *LinkedList) RemoveNode(name string) error {
 }
 
 func (b *Broker) CreateStore(name string, ip_address string) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if _, exists := b.stores[name]; exists {
-		return errors.New("store with this name already exists")
-	}
-	
-	// Instead of creating an in-process KVStore, assume it's already running and registered via HTTP
-	// Add to stores and peerlist
-	store := &kvstore.KVStore{
-		Name:      name,
-		IPAddress: ip_address,
-	}
-	b.stores[name] = store
-	b.loads[name] = 0
+    fmt.Printf("Attempting to create store:\nName: %s\nIP Address: %s\n", name, ip_address)
 
-	b.peerlist.AddNode(name, ip_address)
-	
-	// Notify existing stores about the new store
-	NotifyPeersOfEachOther(b.peerlist)
-	
-	return nil
+    b.mu.Lock()
+    defer b.mu.Unlock()
+
+    if _, exists := b.stores[name]; exists {
+        fmt.Printf("Store with name '%s' already exists. Skipping creation.\n", name)
+        return errors.New("store with this name already exists")
+    }
+
+    if ip_address == "" {
+        fmt.Printf("Error: Empty IP address for store '%s'.\n", name)
+        return errors.New("invalid IP address")
+    }
+
+    // Add to stores and peerlist
+    fmt.Printf("Registering new store:\nName: %s\nIP Address: %s\n", name, ip_address)
+    store := &kvstore.KVStore{
+        Name:      name,
+        IPAddress: ip_address,
+    }
+    b.stores[name] = store
+    b.loads[name] = 0
+
+    fmt.Printf("Adding to peer list: Name: %s, IP Address: %s\n", name, ip_address)
+    b.peerlist.AddNode(name, ip_address)
+
+    // Debug: Print current list of stores
+    fmt.Println("Current list of stores:")
+    for storeName, store := range b.stores {
+        fmt.Printf("  Store Name: %s, IP Address: %s\n", storeName, store.IPAddress)
+    }
+
+    // Notify existing stores about the new store
+    fmt.Printf("Notifying peers about the new store: %s\n", name)
+    NotifyPeersOfEachOther(b.peerlist)
+
+    return nil
 }
+
 
 
 func (b *Broker) RemoveStore(name string) error {
@@ -514,19 +532,19 @@ func (b *Broker) ListAllData() error {
 
 // DisplayForward displays the list from head to tail (circularly)
 func (ll *LinkedList) DisplayForward() {
-	if ll.Head == nil {
-		fmt.Println("List is empty")
-		return
-	}
+    if ll.Head == nil {
+        fmt.Println("List is empty")
+        return
+    }
 
-	current := ll.Head
-	for {
-		fmt.Printf("Name: %s, IP: %s\n", current.Name, current.IpAddress)
-		current = current.Next
-		if current == ll.Head {
-			break // Completed a full circle
-		}
-	}
+    current := ll.Head
+    for {
+        fmt.Printf("Name: %s, IP: %s\n", current.Name, current.IpAddress)
+        current = current.Next
+        if current == ll.Head {
+            break // Completed a full circle
+        }
+    }
 }
 
 func (b *Broker) GetList() *LinkedList {
@@ -553,4 +571,6 @@ func (b *Broker) EnablePeriodicSnapshots(storename string, intervalSeconds int) 
 	
 	return nil
 }
+
+
 

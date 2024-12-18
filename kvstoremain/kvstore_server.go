@@ -305,9 +305,11 @@ func main() {
 	}
 
 	// Start the HTTP server
-	fmt.Printf("Starting KVStore web server on :%s\n", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		fmt.Println("Error starting server:", err)
+	serverAddress := fmt.Sprintf(":%s", port)
+	fmt.Printf("Starting KVStore web server on %s\n", serverAddress)
+	if err := http.ListenAndServe(serverAddress, nil); err != nil {
+		fmt.Printf("Error starting server on %s: %v\n", serverAddress, err)
+		os.Exit(1)
 	}
 }
 

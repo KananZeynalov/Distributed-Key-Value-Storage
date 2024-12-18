@@ -153,27 +153,33 @@ func (h *BrokerHandler) ListStoresHandler(w http.ResponseWriter, r *http.Request
 }
 
 type KVStoreConfig struct {
-	Name      string `json:"name"`
-	IPAddress string `json:"ip_address"`
+	Name      string `json:"Name"`
+	IPAddress string `json:"IPAddress"`
 }
 
-func LoadKVStoresConfig(filePath string) ([]KVStoreConfig, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
+func LoadKVStoresConfig(filepath string) ([]KVStoreConfig, error) {
+    fmt.Printf("Loading KVStore configurations from file: %s\n", filepath)
 
-	var config struct {
-		KVStores []KVStoreConfig `json:"kvstores"`
-	}
+    file, err := os.Open(filepath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to open config file: %w", err)
+    }
+    defer file.Close()
 
-	if err := json.NewDecoder(file).Decode(&config); err != nil {
-		return nil, err
-	}
+    var configs []KVStoreConfig
+    decoder := json.NewDecoder(file)
+    if err := decoder.Decode(&configs); err != nil {
+        return nil, fmt.Errorf("failed to decode config file: %w", err)
+    }
 
-	return config.KVStores, nil
+    fmt.Println("Loaded KVStore configurations:")
+    for _, config := range configs {
+        fmt.Printf("  Name: %s, IP Address: %s\n", config.Name, config.IPAddress)
+    }
+
+    return configs, nil
 }
+
 
 // DeleteHandler: POST /delete { "key": "..." }
 func (h *BrokerHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {

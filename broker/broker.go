@@ -98,6 +98,8 @@ type Broker struct {
 	stores   map[string]*kvstore.KVStore
 	loads    map[string]int // Simple load metric: number of operations handled
 	peerlist *LinkedList
+	keyLocation map[string]string // Tracks which KVStore contains a key
+
 }
 
 // NewBroker initializes and returns a new Broker instance.
@@ -106,6 +108,7 @@ func NewBroker() *Broker {
 		stores:   make(map[string]*kvstore.KVStore),
 		loads:    make(map[string]int),
 		peerlist: &LinkedList{},
+		keyLocation: make(map[string]string),
 	}
 }
 
@@ -393,48 +396,55 @@ func (b *Broker) SetKey(key string, value string) error {
 		return fmt.Errorf("KVStore returned status: %d", resp.StatusCode)
 	}
 
-	// Log which store was used
-	fmt.Printf("Key '%s' set in KVStore: %s\n", key, store.IPAddress)
+	// Track the key location
+	b.mu.Lock()
+	b.keyLocation[key] = store.IPAddress
+	b.mu.Unlock()
 
 	b.IncrementLoad(store.Name)
+	fmt.Printf("Key '%s' set in KVStore: %s\n", key, store.IPAddress)
 	return nil
 }
 
-// DeleteKey deletes a key by querying all KVStores or the known KVStore where the key is stored.
+// DeleteKey deletes a key from the specific KVStore where it is located.
 func (b *Broker) DeleteKey(key string) bool {
 	b.mu.RLock()
-	defer b.mu.RUnlock()
+	storeIP, exists := b.keyLocation[key]
+	b.mu.RUnlock()
 
-	// Check each store for the key and delete it
-	for _, store := range b.stores {
-		url := fmt.Sprintf("http://%s/delete", store.IPAddress)
-		data := map[string]string{
-			"key": key,
-		}
-		jsonData, err := json.Marshal(data)
-		if err != nil {
-			log.Printf("Error marshalling delete request: %v\n", err)
-			continue
-		}
-
-		resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
-		if err != nil {
-			log.Printf("Error contacting KVStore at %s: %v\n", store.IPAddress, err)
-			continue
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode == http.StatusOK {
-			// Successfully deleted the key
-			log.Printf("Key '%s' successfully deleted from KVStore at %s\n", key, store.IPAddress)
-			b.ResetLoad(store.Name)
-			return true
-		} else {
-			log.Printf("Failed to delete key '%s' from KVStore at %s, status code: %d\n", key, store.IPAddress, resp.StatusCode)
-		}
+	if !exists {
+		log.Printf("Key '%s' not found in keyLocation map.\n", key)
+		return false
 	}
 
-	log.Printf("Key '%s' not found in any KVStore.\n", key)
+	url := fmt.Sprintf("http://%s/delete", storeIP)
+	data := map[string]string{
+		"key": key,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		log.Printf("Error marshalling delete request: %v\n", err)
+		return false
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		log.Printf("Error contacting KVStore at %s: %v\n", storeIP, err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		// Successfully deleted the key, remove it from the keyLocation map
+		log.Printf("Key '%s' successfully deleted from KVStore at %s\n", key, storeIP)
+		b.mu.Lock()
+		delete(b.keyLocation, key)
+		b.mu.Unlock()
+		return true
+	}
+
+	// Log response if deletion failed
+	log.Printf("Failed to delete key '%s' from KVStore at %s, status code: %d\n", key, storeIP, resp.StatusCode)
 	return false
 }
 

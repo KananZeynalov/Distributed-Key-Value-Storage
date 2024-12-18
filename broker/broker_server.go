@@ -182,6 +182,7 @@ func (h *BrokerHandler) ListStoresHandler(w http.ResponseWriter, r *http.Request
 
 
 // DeleteHandler: POST /delete { "key": "..." }
+// DeleteHandler: POST /delete { "key": "..." }
 func (h *BrokerHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST is allowed", http.StatusMethodNotAllowed)
@@ -197,6 +198,7 @@ func (h *BrokerHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Acquire lock for broker operations
 	h.mu.Lock()
 	deleted := h.broker.DeleteKey(req.Key)
 	h.mu.Unlock()
@@ -204,14 +206,15 @@ func (h *BrokerHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 	if deleted {
 		// Key was successfully deleted
 		response := map[string]string{
-			"message": "Delete operation successful",
+			"message": fmt.Sprintf("Key '%s' successfully deleted.", req.Key),
 		}
 		jsonResponse(w, response)
 	} else {
-		// Key was not found in any store
-		http.Error(w, "Key not found in any store", http.StatusNotFound)
+		// Key was not found
+		http.Error(w, fmt.Sprintf("Key '%s' not found in any KVStore.", req.Key), http.StatusNotFound)
 	}
 }
+
 
 // SnapshotKVStoreHandler: POST /snapshot/enable { "storename": "...", "interval": <seconds> }
 func (h *BrokerHandler) SnapshotKVStoreHandler(w http.ResponseWriter, r *http.Request) {

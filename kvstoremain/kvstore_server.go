@@ -209,40 +209,6 @@ func (h *KVStoreHandler) PeerDeadHandler(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(response)
 }
 
-func RequestPeerBackup(peerURL string) {
-	resp, err := http.Get(peerURL + "/peer-backup")
-	if err != nil {
-		fmt.Println("Error sending request to peer-backup:", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Println("Error response from peer-backup:", resp.Status)
-		return
-	}
-
-	var data map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		fmt.Println("Error decoding response data:", err)
-		return
-	}
-
-	file, err := os.Create("peer.snapshot.json")
-	if err != nil {
-		fmt.Println("Error creating snapshot file:", err)
-		return
-	}
-	defer file.Close()
-
-	if err := json.NewEncoder(file).Encode(data); err != nil {
-		fmt.Println("Error encoding data to snapshot file:", err)
-		return
-	}
-
-	fmt.Println("Data successfully saved to peer.snapshot.json")
-}
-
 func (h *KVStoreHandler) PeerBackupHandler(w http.ResponseWriter, r *http.Request) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -298,6 +264,10 @@ func (h *KVStoreHandler) StartPeriodicSnapshotsHandler(w http.ResponseWriter, r 
 	json.NewEncoder(w).Encode(response)
 }
 
+func (h *KVStoreHandler) StartPeriodicSnapshots() {
+	go h.kvstore.StartPeriodicSnapshots(time.Duration(15) * time.Second)
+}
+
 func main() {
 
 	if len(os.Args) < 3 {
@@ -325,6 +295,8 @@ func main() {
 		fmt.Println("Failed to register with Broker:", err)
 		os.Exit(1)
 	}
+
+	go handler.kvstore.StartPeriodicSnapshots(time.Duration(15) * time.Second)
 
 	// Start the HTTP server
 	serverAddress := fmt.Sprintf(":%s", port)

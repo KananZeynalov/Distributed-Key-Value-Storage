@@ -185,3 +185,27 @@ func NotifyPeersOfEachOther(ll *LinkedList) {
 		}
 	}
 }
+
+func StartPeriodicSnapshot(kvstore_ip string, interval string) error {
+	// Ensure the interval parameter is provided
+	if interval == "" {
+		return fmt.Errorf("interval parameter cannot be empty")
+	}
+
+	// Create the URL with the interval parameter
+	url := fmt.Sprintf("http://%s/start-snapshots?interval=%s", kvstore_ip, interval)
+
+	// Create and send the HTTP request
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("error sending periodic snapshots request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for a successful response
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("error response from store starting snapshots: %s", resp.Status)
+	}
+
+	return nil
+}

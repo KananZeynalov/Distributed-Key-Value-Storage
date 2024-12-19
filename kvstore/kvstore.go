@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -11,9 +12,9 @@ import (
 
 // KVStore represents the in-memory key-value store.
 type KVStore struct {
-	mu         sync.RWMutex
-	data       map[string]string
-	Name       string
+	mu        sync.RWMutex
+	data      map[string]string
+	Name      string
 	IPAddress string
 	PeerIP    string
 }
@@ -54,9 +55,10 @@ func (s *KVStore) LoadAndMergeFromDisk() error {
 // NewKVStore initializes and returns a new KVStore instance.
 func NewKVStore(name string, port string) *KVStore {
 	return &KVStore{
-		data:       make(map[string]string),
-		Name:       name,
-        IPAddress: fmt.Sprintf("localhost:%s", port), // Set correct address format
+		data:      make(map[string]string),
+		Name:      name,
+		IPAddress: fmt.Sprintf("localhost:%s", port), // Set correct address format
+		PeerIP:    "",
 	}
 }
 
@@ -185,6 +187,40 @@ func (s *KVStore) LoadFromDisk(filename string) error {
 	return nil
 }
 
+func (s *KVStore) RequestPeerBackup(peerURL string) {
+	resp, err := http.Get(peerURL + "/peer-backup")
+	if err != nil {
+		fmt.Println("Error sending request to peer-backup:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("Error response from peer-backup:", resp.Status)
+		return
+	}
+
+	var data map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		fmt.Println("Error decoding response data:", err)
+		return
+	}
+	peerBackupFileName := "peerof" + s.Name + ".snapshot.json"
+	file, err := os.Create(peerBackupFileName)
+	if err != nil {
+		fmt.Println("Error creating snapshot file:", err)
+		return
+	}
+	defer file.Close()
+
+	if err := json.NewEncoder(file).Encode(data); err != nil {
+		fmt.Println("Error encoding data to snapshot file:", err)
+		return
+	}
+
+	fmt.Println("Data successfully saved to peer.snapshot.json")
+}
+
 // StartPeriodicSnapshots starts a goroutine that saves the data to disk periodically.
 func (s *KVStore) StartPeriodicSnapshots(interval time.Duration) {
 	go func() {
@@ -192,6 +228,10 @@ func (s *KVStore) StartPeriodicSnapshots(interval time.Duration) {
 		defer ticker.Stop()
 		filename := s.Name + ".snapshot.json"
 		for range ticker.C {
+			peer_ip := s.GetPeerIP()
+			if peer_ip != "" {
+				s.RequestPeerBackup(fmt.Sprintf("http://%s", peer_ip))
+			}
 			err := s.SaveToDisk()
 			if err != nil {
 				fmt.Println("Error during periodic snapshot:", err)
@@ -201,5 +241,3 @@ func (s *KVStore) StartPeriodicSnapshots(interval time.Duration) {
 		}
 	}()
 }
-
-

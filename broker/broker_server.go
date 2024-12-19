@@ -346,6 +346,9 @@ func (h *BrokerHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Start Periodic Snapshots
+	//StartPeriodicSnapshot(req.IPAddress, "15")
+
 	// Optionally, notify existing peers about the new store
 	NotifyPeersOfEachOther(h.broker.peerlist)
 

@@ -94,21 +94,18 @@ func (b *Broker) LoadSnapshot() error {
 
 // Broker manages multiple KVStore instances and handles load balancing.
 type Broker struct {
-	mu          sync.RWMutex
-	stores      map[string]*kvstore.KVStore
-	loads       map[string]int // Simple load metric: number of operations handled
-	peerlist    *LinkedList
-	keyLocation map[string]string // Tracks which KVStore contains a key
-
+	mu       sync.RWMutex
+	stores   map[string]*kvstore.KVStore
+	loads    map[string]int // Simple load metric: number of operations handled
+	peerlist *LinkedList
 }
 
 // NewBroker initializes and returns a new Broker instance.
 func NewBroker() *Broker {
 	return &Broker{
-		stores:      make(map[string]*kvstore.KVStore),
-		loads:       make(map[string]int),
-		peerlist:    &LinkedList{},
-		keyLocation: make(map[string]string),
+		stores:   make(map[string]*kvstore.KVStore),
+		loads:    make(map[string]int),
+		peerlist: &LinkedList{},
 	}
 }
 
@@ -392,11 +389,6 @@ func (b *Broker) SetKey(key string, value string) error {
 		return fmt.Errorf("KVStore returned status: %d", resp.StatusCode)
 	}
 
-	// Track the key location
-	b.mu.Lock()
-	b.keyLocation[key] = store.IPAddress
-	b.mu.Unlock()
-
 	b.IncrementLoad(store.Name)
 	fmt.Printf("Key '%s' set in KVStore: %s\n", key, store.IPAddress)
 	return nil
@@ -449,9 +441,6 @@ func (b *Broker) DeleteKey(key string) (bool, error) {
 	if resp.StatusCode == http.StatusOK {
 		// Successfully deleted the key, remove it from the keyLocation map
 		log.Printf("key '%s' successfully deleted from KVStore at %s", key, storeIP)
-		b.mu.Lock()
-		delete(b.keyLocation, key)
-		b.mu.Unlock()
 		return true, nil
 	}
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"kv/kvstore"
@@ -9,10 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"bytes"
 )
-
-
 
 func LoadKVStoresConfig(filePath string) ([]KVStoreConfig, error) {
 	file, err := os.Open(filePath)
@@ -147,12 +145,37 @@ func (h *KVStoreHandler) GetAllDataHandler(w http.ResponseWriter, r *http.Reques
 	jsonResponse(w, data)
 }
 
+func (h *KVStoreHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
+	var requestData map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	key, keyExists := requestData["key"]
+	if !keyExists {
+		http.Error(w, "Missing key parameter", http.StatusBadRequest)
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	err := h.kvstore.Delete(key)
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, "Key Not Found", http.StatusNotFound)
+		return
+	}
+	response := map[string]string{"status": "Key-Value pair successfully deleted"}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func (h *KVStoreHandler) SetupRoutes() {
 	//key value store routes
 	http.HandleFunc("/get", h.GetHandler)
 	http.HandleFunc("/set", h.SetHandler)
 	http.HandleFunc("/name", h.GetNameHandler)
 	http.HandleFunc("/getall", h.GetAllDataHandler)
+	http.HandleFunc("/delete", h.DeleteHandler)
 
 	//peering routes
 	http.HandleFunc("/notify", h.PeerNotificationHandler) //comes from broker, when it tells you who your peer is
@@ -275,7 +298,6 @@ func (h *KVStoreHandler) StartPeriodicSnapshotsHandler(w http.ResponseWriter, r 
 	json.NewEncoder(w).Encode(response)
 }
 
-
 func main() {
 
 	if len(os.Args) < 3 {
@@ -298,7 +320,7 @@ func main() {
 		fmt.Println("BROKER_URL environment variable not set")
 		os.Exit(1)
 	}
-err := RegisterWithBroker(brokerURL, kvname, fmt.Sprintf("localhost:%s", port))
+	err := RegisterWithBroker(brokerURL, kvname, fmt.Sprintf("localhost:%s", port))
 	if err != nil {
 		fmt.Println("Failed to register with Broker:", err)
 		os.Exit(1)
@@ -336,4 +358,3 @@ func RegisterWithBroker(brokerURL, name, ip string) error {
 
 	return nil
 }
-

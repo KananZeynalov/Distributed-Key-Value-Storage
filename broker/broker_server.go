@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+
 	//"os"
 	"sync"
 )
@@ -30,7 +31,6 @@ type RegisterRequest struct {
 	Name      string `json:"name"`
 	IPAddress string `json:"ip_address"`
 }
-
 
 // SetupRoutes sets up HTTP routes for the broker.
 func (h *BrokerHandler) SetupRoutes() {
@@ -180,7 +180,6 @@ func (h *BrokerHandler) ListStoresHandler(w http.ResponseWriter, r *http.Request
 //     return configs, nil
 // }
 
-
 // DeleteHandler: POST /delete { "key": "..." }
 // DeleteHandler: POST /delete { "key": "..." }
 func (h *BrokerHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +199,7 @@ func (h *BrokerHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Acquire lock for broker operations
 	h.mu.Lock()
-	deleted := h.broker.DeleteKey(req.Key)
+	deleted, error := h.broker.DeleteKey(req.Key)
 	h.mu.Unlock()
 
 	if deleted {
@@ -211,10 +210,9 @@ func (h *BrokerHandler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, response)
 	} else {
 		// Key was not found
-		http.Error(w, fmt.Sprintf("Key '%s' not found in any KVStore.", req.Key), http.StatusNotFound)
+		http.Error(w, fmt.Sprintf("Error: %s", error), http.StatusNotFound)
 	}
 }
-
 
 // SnapshotKVStoreHandler: POST /snapshot/enable { "storename": "...", "interval": <seconds> }
 func (h *BrokerHandler) SnapshotKVStoreHandler(w http.ResponseWriter, r *http.Request) {

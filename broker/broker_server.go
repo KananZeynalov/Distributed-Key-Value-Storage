@@ -1,13 +1,106 @@
 package broker
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	//"os"
 	"sync"
 )
+
+func NotifyPeersOfEachOther(ll *LinkedList) {
+	// Check if the list is empty
+	if ll.Head == nil {
+		fmt.Println("Peer list is empty. No notifications sent.")
+		return
+	}
+
+	// Create a snapshot of the linked list
+	var peers []*StoreNode
+	current := ll.Head
+	for {
+		peers = append(peers, current)
+		current = current.Next
+		if current == ll.Head {
+			break // Completed a full circle
+		}
+	}
+
+	// Notify each peer about the next peer
+	for _, peer := range peers {
+		ipAddr := peer.IpAddress
+		nextPeerIP := peer.Next.IpAddress
+
+		// Skip notification if IP addresses are invalid or identical
+		if ipAddr == "" || nextPeerIP == "" {
+			fmt.Printf("Skipping notification for invalid IPs: current=%s, next=%s\n", ipAddr, nextPeerIP)
+			continue
+		}
+		if ipAddr == nextPeerIP {
+			fmt.Printf("Skipping notification: current IP (%s) is the same as next IP (%s)\n", ipAddr, nextPeerIP)
+			continue
+		}
+
+		// Prepare the notification payload
+		url := fmt.Sprintf("http://%s/notify", ipAddr)
+		data := map[string]string{"peer_ip": nextPeerIP}
+		jsonData, err := json.Marshal(data)
+		if err != nil {
+			fmt.Printf("Error marshalling data for %s: %v\n", ipAddr, err)
+			continue
+		}
+
+		// Create and send the HTTP request
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			fmt.Printf("Error creating request to %s: %v\n", ipAddr, err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 10 * time.Second} // Set timeout to prevent hanging requests
+		resp, err := client.Do(req)
+		if err != nil {
+			fmt.Printf("Error sending request to %s: %v\n", ipAddr, err)
+			continue
+		}
+		resp.Body.Close()
+
+		// Handle response status
+		if resp.StatusCode != http.StatusOK {
+			fmt.Printf("Failed to notify peer at %s, status code: %d\n", ipAddr, resp.StatusCode)
+		} else {
+			fmt.Printf("Successfully notified peer at %s about %s\n", ipAddr, nextPeerIP)
+		}
+	}
+}
+
+func StartPeriodicSnapshot(kvstore_ip string, interval string) error {
+	// Ensure the interval parameter is provided
+	if interval == "" {
+		return fmt.Errorf("interval parameter cannot be empty")
+	}
+
+	// Create the URL with the interval parameter
+	url := fmt.Sprintf("http://%s/start-snapshots?interval=%s", kvstore_ip, interval)
+
+	// Create and send the HTTP request
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("error sending periodic snapshots request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for a successful response
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("error response from store starting snapshots: %s", resp.Status)
+	}
+
+	return nil
+}
 
 // Wraps a broker to expose it via HTTP.
 type BrokerHandler struct {
@@ -43,13 +136,13 @@ func (h *BrokerHandler) SetupRoutes() {
 
 	//kv store snapshot operations
 	http.HandleFunc("/kvstore/snapshot/manual", h.ManualSnapshotHandler)
-	http.HandleFunc("/kvstore/snapshot/periodic", h.SnapshotKVStoreHandler)
-	// http.HandleFunc("/kvstore/snapshot/load", h.LoadKVSToreSnapshotHandler) TODO: Implement this
-	http.HandleFunc("/kvstore/new", h.NewKVHandler)
+	// http.HandleFunc("/kvstore/snapshot/periodic", h.SnapshotKVStoreHandler)
+	// // http.HandleFunc("/kvstore/snapshot/load", h.LoadKVSToreSnapshotHandler) TODO: Implement this
+	// http.HandleFunc("/kvstore/new", h.NewKVHandler)
 
-	//broker snapshot operations
-	http.HandleFunc("/broker/snapshot/periodic", h.SnapshotBrokerHandler)
-	// http.HandleFunc("/broker/snapshot/load", h.LoadBrokerSnapshotHandler) TODO: Implement this
+	// //broker snapshot operations
+	// http.HandleFunc("/broker/snapshot/periodic", h.SnapshotBrokerHandler)
+	// // http.HandleFunc("/broker/snapshot/load", h.LoadBrokerSnapshotHandler) TODO: Implement this
 	http.HandleFunc("/register", h.RegisterHandler)
 
 }

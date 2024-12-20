@@ -63,21 +63,21 @@ func (b *Broker) SaveSnapshot() error {
 	return os.WriteFile(filePath, file, 0644)
 }
 
-func (b *Broker) GetStorePeerIP(storeName string) (string, error) {
+func (b *Broker) GetStorePeerIP(storeName string) (string, string, error) {
 
 	store, exists := b.stores[storeName]
 	if !exists {
-		return "", errors.New("store not found")
+		return "", "", errors.New("store not found")
 	}
 
 	current := b.peerlist.Head
 	if current == nil {
-		return "", errors.New("peer list is empty")
+		return "", "", errors.New("peer list is empty")
 	}
 
 	for {
 		if current.Name == store.Name {
-			return current.Prev.IpAddress, nil
+			return current.Prev.IpAddress, current.Prev.Name, nil
 		}
 		current = current.Next
 		if current == b.peerlist.Head {
@@ -85,7 +85,7 @@ func (b *Broker) GetStorePeerIP(storeName string) (string, error) {
 		}
 	}
 
-	return "", errors.New("peer not found")
+	return "", "", errors.New("peer not found")
 }
 
 // LoadSnapshot loads the broker state from a JSON file.
@@ -230,7 +230,7 @@ func (b *Broker) CreateStore(name string, ip_address string) error {
 
 	// Notify existing stores about the new store
 	fmt.Printf("Notifying peers about the new store: %s\n", name)
-	NotifyPeersOfEachOther(b.peerlist)
+	b.StartPeering()
 
 	return nil
 }
@@ -249,7 +249,7 @@ func (b *Broker) RemoveStore(name string) error {
 	b.peerlist.RemoveNode(name)
 
 	// Notify remaining stores about the removal
-	NotifyPeersOfEachOther(b.peerlist)
+	b.StartPeering()
 
 	// Optionally, send a delete request to the KVStore to gracefully shut it down
 	url := fmt.Sprintf("http://%s/shutdown", store.IPAddress)
@@ -367,12 +367,17 @@ func (b *Broker) GetKey(key string) (string, error) {
 		if err != nil {
 			fmt.Printf("Error contacting KVStore at %s: %v\n", store.IPAddress, err)
 			//Ediz, I could not find the ip of its peer. Le it be ip_peer;
-			ip_peer, err := b.GetStorePeerIP(store.Name)
+			ip_peer, name_peer, err := b.GetStorePeerIP(store.Name)
 			if err != nil {
 				fmt.Printf("Error getting peer ip of %s: %v\n", store.Name, err)
 			}
+			fmt.Printf("Now %s will continue where he left\n", name_peer)
 			url := fmt.Sprintf("http://%s/peer-dead", ip_peer)
 			http.Post(url, "application/json", nil)
+			delete(b.stores, store.Name)
+			delete(b.loads, store.Name)
+			b.peerlist.RemoveNode(store.Name)
+			b.StartPeering()
 			continue
 		}
 		defer resp.Body.Close()

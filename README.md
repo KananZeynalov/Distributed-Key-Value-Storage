@@ -76,6 +76,11 @@ curl -X POST "http://localhost:8080/set" \
   }'
 ```
 
+### Delete a Key-Value Pair
+```bash
+curl -X POST http://localhost:8080/delete -H "Content-Type: application/json" -d '{"key": "k5"}'
+```
+
 ### Retrieve a Value
 ```bash
 curl "http://localhost:8080/get?key=k2"

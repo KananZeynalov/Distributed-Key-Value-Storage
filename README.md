@@ -91,6 +91,11 @@ curl "http://localhost:8080/get?key=k2"
 curl "http://localhost:8080/getall"
 ```
 
+### List All Stores
+```bash
+curl "http://localhost:8080/stores/list"
+```
+
 ### Trigger Manual Snapshot
 ```bash
 curl -X POST "http://localhost:8080/kvstore/snapshot/manual"

@@ -8,59 +8,12 @@ import (
 	"kv/kvstore"
 	"log"
 	"net/http"
-	"os"
 	"sync"
 )
 
 func (b *Broker) StartPeering() error {
 	NotifyPeersOfEachOther(b.peerlist)
 	return nil
-}
-
-// SaveSnapshot saves the current state of the broker to a JSON file.
-func (b *Broker) SaveSnapshot() error {
-	var filePath = "./data/broker/broker_snapshot.json"
-
-	// Ensure the directory exists
-	dir := "./data/broker"
-	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		log.Fatalf("Failed to create directory: %v", err)
-	}
-
-	// Check if the file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		// File does not exist, create it
-		file, err := os.Create(filePath)
-		if err != nil {
-			log.Fatalf("Failed to create file: %v", err)
-		}
-		defer file.Close()
-		log.Printf("File created: %s", filePath)
-	} else {
-		// File exists, open it
-		file, err := os.Open(filePath)
-		if err != nil {
-			log.Fatalf("Failed to open file: %v", err)
-		}
-		defer file.Close()
-		log.Printf("File opened: %s", filePath)
-	}
-
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	data := struct {
-		Stores map[string]int `json:"stores"`
-	}{
-		Stores: b.loads,
-	}
-
-	file, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(filePath, file, 0644)
 }
 
 func (b *Broker) GetStorePeerIP(storeName string) (string, string, error) {
@@ -86,35 +39,6 @@ func (b *Broker) GetStorePeerIP(storeName string) (string, string, error) {
 	}
 
 	return "", "", errors.New("peer not found")
-}
-
-// LoadSnapshot loads the broker state from a JSON file.
-func (b *Broker) LoadSnapshot() error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	var filePath = "./data/broker/broker_snapshot.json"
-
-	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	data := struct {
-		Stores map[string]int `json:"stores"`
-	}{}
-
-	if err := json.NewDecoder(file).Decode(&data); err != nil {
-		return err
-	}
-
-	for name, load := range data.Stores {
-		if store, exists := b.stores[name]; exists {
-			b.loads[store.Name] = load
-		}
-	}
-
-	return nil
 }
 
 // Broker manages multiple KVStore instances and handles load balancing.

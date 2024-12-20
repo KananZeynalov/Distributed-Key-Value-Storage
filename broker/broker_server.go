@@ -127,22 +127,12 @@ type RegisterRequest struct {
 
 // SetupRoutes sets up HTTP routes for the broker.
 func (h *BrokerHandler) SetupRoutes() {
-	//kv store basic operations
 	http.HandleFunc("/set", h.SetHandler)
 	http.HandleFunc("/get", h.GetHandler)
 	http.HandleFunc("/getall", h.GetAllHandler)
 	http.HandleFunc("/stores/list", h.ListStoresHandler)
 	http.HandleFunc("/delete", h.DeleteHandler)
-
-	//kv store snapshot operations
 	http.HandleFunc("/kvstore/snapshot/manual", h.ManualSnapshotHandler)
-	// http.HandleFunc("/kvstore/snapshot/periodic", h.SnapshotKVStoreHandler)
-	// // http.HandleFunc("/kvstore/snapshot/load", h.LoadKVSToreSnapshotHandler) TODO: Implement this
-	// http.HandleFunc("/kvstore/new", h.NewKVHandler)
-
-	// //broker snapshot operations
-	// http.HandleFunc("/broker/snapshot/periodic", h.SnapshotBrokerHandler)
-	// // http.HandleFunc("/broker/snapshot/load", h.LoadBrokerSnapshotHandler) TODO: Implement this
 	http.HandleFunc("/register", h.RegisterHandler)
 
 }
@@ -393,26 +383,6 @@ func (h *BrokerHandler) ManualSnapshotHandler(w http.ResponseWriter, r *http.Req
 }
 
 // SnapshotBrokerHandler: POST /snapshot/broker
-func (h *BrokerHandler) SnapshotBrokerHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Only POST is allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	h.mu.Lock()
-	err := h.broker.SaveSnapshot()
-	h.mu.Unlock()
-
-	if err != nil {
-		http.Error(w, "Error saving broker snapshot: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	response := map[string]string{
-		"message": "Broker snapshot saved successfully.",
-	}
-	jsonResponse(w, response)
-}
 
 func jsonResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")

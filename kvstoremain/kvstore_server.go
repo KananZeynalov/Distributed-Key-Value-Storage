@@ -190,12 +190,6 @@ func (h *KVStoreHandler) SetupRoutes() {
 }
 
 func (h *KVStoreHandler) PeerDeadHandler(w http.ResponseWriter, r *http.Request) {
-	var requestData map[string]string
-	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

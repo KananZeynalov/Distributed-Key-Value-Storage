@@ -63,6 +63,31 @@ func (b *Broker) SaveSnapshot() error {
 	return os.WriteFile(filePath, file, 0644)
 }
 
+func (b *Broker) GetStorePeerIP(storeName string) (string, error) {
+
+	store, exists := b.stores[storeName]
+	if !exists {
+		return "", errors.New("store not found")
+	}
+
+	current := b.peerlist.Head
+	if current == nil {
+		return "", errors.New("peer list is empty")
+	}
+
+	for {
+		if current.Name == store.Name {
+			return current.Prev.IpAddress, nil
+		}
+		current = current.Next
+		if current == b.peerlist.Head {
+			break // full circle
+		}
+	}
+
+	return "", errors.New("peer not found")
+}
+
 // LoadSnapshot loads the broker state from a JSON file.
 func (b *Broker) LoadSnapshot() error {
 	b.mu.Lock()
@@ -341,6 +366,13 @@ func (b *Broker) GetKey(key string) (string, error) {
 		resp, err := http.Get(url)
 		if err != nil {
 			fmt.Printf("Error contacting KVStore at %s: %v\n", store.IPAddress, err)
+			//Ediz, I could not find the ip of its peer. Le it be ip_peer;
+			ip_peer, err := b.GetStorePeerIP(store.Name)
+			if err != nil {
+				fmt.Printf("Error getting peer ip of %s: %v\n", store.Name, err)
+			}
+			url := fmt.Sprintf("http://%s/peer-dead", ip_peer)
+			http.Post(url, "application/json", nil)
 			continue
 		}
 		defer resp.Body.Close()

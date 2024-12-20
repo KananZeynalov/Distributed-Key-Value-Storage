@@ -22,7 +22,7 @@ type KVStore struct {
 // LoadAndMergeFromDisk loads data from a file and merges it with the existing in-memory key-value store.
 func (s *KVStore) LoadAndMergeFromDisk() error {
 	// Open the snapshot file
-	filename := "peer.snapshot.json"
+	filename := "peerof" + s.Name + ".snapshot.json"
 	file, err := os.Open(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
